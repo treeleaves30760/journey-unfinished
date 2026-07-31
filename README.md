@@ -14,11 +14,13 @@
 - Discord OAuth2 登入、SQLite 工作階段與 Discord ID 管理員白名單
 - 寫下旅箋：照片、縣市、景點、座標、娃娃名稱、日期與心得
 - 6 種通用預設頭像，或在瀏覽器以 Canvas 裁切照片區塊作為頭像
-- 旅箋詳情與訪客留言
+- 旅箋詳情與訪客留言（匿名，含內容衛生檢查與分層限流）
+- 作者可自行刪除自己的旅箋，照片一併移除
 - 管理中心：會員列表、旅箋檢視與管理員刪除
 - Nitro API + SQLite 持久化
-- 具總量／欄位／檔案上限的串流 multipart 圖片上傳與圖片讀取路由
+- 具總量／欄位／檔案上限的串流 multipart 圖片上傳，上傳圖片一律重新編碼並剝除 EXIF/GPS
 - Docker 多階段 production image、非 root 執行、健康檢查與 Compose volume
+- k3s 部署資產：manifest、建置匯入腳本與 runbook（見 [`deploy/k3s/`](deploy/k3s/README.md)）
 
 ## 技術版本與安全基線
 
@@ -28,6 +30,7 @@
 - Leaflet `1.9.4` + OpenStreetMap Standard tiles
 - @fastify/busboy `3.2.0`（有界限的串流 multipart parser）
 - better-sqlite3 `13.0.1`
+- sharp `0.35.3`（圖片重新編碼與 metadata 剝除）
 - Vitest `4.1.10`
 - Node.js `24.18.0` 容器映像（Node 24 LTS 線）
 
@@ -36,12 +39,16 @@
 安全措施包括：
 
 - 圖片僅接受 JPEG、PNG、WebP，並同時檢查 MIME 與 magic bytes
+- **上傳圖片一律以 sharp 重新解碼並重新編碼，藉此剝除全部 EXIF/XMP/IPTC metadata**（含 GPS 座標、拍攝時間、相機序號）。EXIF orientation 會先套用再丟棄，避免直向照片被轉倒。同時限制輸入像素數與輸出最長邊 4096px，防止 decompression bomb
 - 單檔預設限制 5 MiB（可用環境變數調整），multipart 以 Busboy 串流解析並限制總檔案數、欄位數與 request 大小，避免先把無界限請求載入記憶體
 - 上傳檔名由密碼學亂數產生，讀取路由會防止路徑穿越
 - API 對長度、縣市、座標、日期、頭像選項做伺服器端驗證；留言 JSON 亦以串流方式限制為 8 KiB
+- **旅箋與留言的自由文字套用同一套內容衛生規則**：先 NFC 正規化再量長度（避免用組合字元繞過上限）、拒絕控制字元與零寬／雙向覆寫字元（但不誤殺 ZWJ emoji 組合）、限制連結數量。兩條路徑一致處理 —— 旅箋雖需登入，但 Discord 帳號誰都能註冊
+- 匿名留言另有分層限流（每分鐘爆量閘、每小時總量、單篇上限）與內容指紋，擋短時間內的重複洗版
 - SQLite 使用 prepared statements
-- 上傳內容加上 `nosniff`、明確 Content-Type 與保守快取標頭
-- 寫下旅箋需 Discord 登入，建立與匿名留言另含每 IP／程序的基本速率限制；預設不信任可偽造的 `X-Forwarded-For`（多實例正式環境仍建議由反向代理或 Redis 統一限流）
+- **全站送出真正的安全 response headers**（Nitro `routeRules`）：CSP、`X-Frame-Options: DENY`、HSTS、`Referrer-Policy`、`Permissions-Policy`、`nosniff`。使用者上傳的圖片另以 `default-src 'none'; sandbox` 的最小權限 CSP 提供，即使是 polyglot 檔案也無法在本站 origin 下執行
+- 寫下旅箋需 Discord 登入。**限流以「可信代理層數」（`NUXT_TRUSTED_PROXY_HOPS`）解析真實來源 IP**，預設 0 表示完全忽略可偽造的 `X-Forwarded-For`；設為 N 時取該 header 由右往左數第 N 筆。反向代理必須「覆寫」而非「附加」該 header，否則最左值由用戶端提供
+- CSRF：state-changing 請求驗 `Origin`，缺席時退驗 `Referer`，兩者皆無一律拒絕
 - Docker runtime 使用 UID/GID 1001 非 root 使用者、drop capabilities、`no-new-privileges`
 
 > 沒有任何專案可以永久保證零漏洞。部署後仍應定期執行 `npm outdated`、`npm audit`、重建映像，並訂閱 Nuxt、Node 與 better-sqlite3 的安全公告。
@@ -50,16 +57,20 @@
 
 ```text
 app.vue                    Nuxt 應用外框
-pages/                     首頁、建立旅箋、旅箋詳情
+pages/                     首頁、登入、建立旅箋、旅箋詳情、管理中心
 middleware/                會員與管理員頁面守衛
 components/                通用 RegionMap、卡片、頭像裁切等元件
+composables/               useAuth、useCheckins 等前端共用邏輯
+utils/                     前後端共用工具（安全回跳路徑）
 assets/css/main.css        全站視覺與響應式樣式
+public/                    靜態資產
 server/api/                Nitro JSON / multipart API
 server/routes/uploads/     上傳圖片讀取路由
-server/utils/              SQLite、驗證與上傳工具
+server/utils/              SQLite、驗證、上傳、請求安全與 Discord 工具
 data/                      SQLite 與上傳圖片（執行時產生）
-test/                      Vitest 驗證與上傳安全測試
+test/                      Vitest 單元與安全測試
 e2e/                       Playwright 多尺寸頁面與權限檢查
+deploy/k3s/                k3s manifest、建置匯入腳本與部署 runbook
 tsconfig.json              Nuxt 前端、伺服器與共用程式的型別檢查入口
 ```
 
@@ -73,7 +84,7 @@ tsconfig.json              Nuxt 前端、伺服器與共用程式的型別檢查
 目前建議使用 Node 24 LTS。
 
 ```bash
-git clone <你的 repository URL>
+git clone https://github.com/treeleaves30760/journey-unfinished.git
 cd journey-unfinished
 cp .env.example .env
 npm ci
@@ -146,7 +157,18 @@ npm run build
 npm run start
 ```
 
-目前測試涵蓋 OAuth URL／code exchange／state、Session Cookie 與撤銷、管理員白名單、安全回跳路徑、same-origin、SQLite fresh schema 與 legacy migration、foreign-key cascade、建立者綁定、檔案刪除、頁面權限，以及 320px 到桌面與矮螢幕的滿版 snap 幾何。Playwright 每次會建立獨立暫存資料庫與 uploads 目錄，結束後自動移除，不會污染開發資料。
+單元測試目前有 **9 個檔案、161 個案例**，涵蓋：
+
+- OAuth URL／code exchange／state、Session Cookie 與撤銷、管理員白名單、安全回跳路徑
+- SQLite fresh schema 與 legacy migration、foreign-key cascade、建立者綁定、檔案刪除
+- 上傳圖片的 EXIF/GPS 剝除、EXIF orientation 套用、decompression bomb 拒絕、損毀檔案回 415
+- 可信代理層數解析來源 IP（含偽造 `X-Forwarded-For` 無效、清單過短退回 socket 位址）
+- CSRF：`Origin`／`Referer` 退階判定與缺兩者時的拒絕
+- 內容衛生：NFC 正規化長度、控制字元、零寬／雙向字元（但不誤殺 ZWJ emoji）、連結數量
+- 留言分層限流、單篇上限與重複內容指紋
+- 旅箋擁有者自刪的權限矩陣（含 `user_id` 為 NULL 的種子資料）
+
+E2E 另涵蓋頁面權限與 320px 到桌面、矮螢幕的滿版 snap 幾何。Playwright 每次會建立獨立暫存資料庫與 uploads 目錄，結束後自動移除，不會污染開發資料。
 
 可測試健康端點：
 
@@ -183,7 +205,8 @@ curl http://localhost:3000/api/health
 | `GET` | `/api/checkins` | 旅箋列表 |
 | `POST` | `/api/checkins` | 登入後以 multipart 建立旅箋 |
 | `GET` | `/api/checkins/:id` | 旅箋與留言詳情 |
-| `POST` | `/api/checkins/:id/comments` | 建立留言 |
+| `DELETE` | `/api/checkins/:id` | 作者刪除自己的旅箋（管理員亦可） |
+| `POST` | `/api/checkins/:id/comments` | 建立留言（匿名） |
 | `GET` | `/api/admin/overview` | 管理員會員與旅箋資料 |
 | `DELETE` | `/api/admin/checkins/:id` | 管理員刪除旅箋 |
 | `GET` | `/uploads/:file` | 讀取已驗證圖片 |
@@ -263,10 +286,12 @@ docker compose up -d
 
 ## 上線部署建議
 
+> **Kubernetes／k3s 部署**：完整的 manifest、建置匯入腳本與 runbook 見 [`deploy/k3s/`](deploy/k3s/README.md)。
+
 Docker Compose 適合單機 VPS。正式公開服務建議在容器前放置 Caddy、Nginx、Traefik 或雲端 Load Balancer：
 
 1. DNS 指向伺服器。
-2. 反向代理 HTTPS 網域至 `127.0.0.1:3000`；只有防火牆確認 3000 不對外且代理會覆寫來源 IP 標頭時，才設定 `NUXT_TRUST_PROXY=true`。
+2. 反向代理 HTTPS 網域至 `127.0.0.1:3000`；只有防火牆確認 3000 不對外，**且代理是「覆寫」而非「附加」`X-Forwarded-For`** 時，才把 `NUXT_TRUSTED_PROXY_HOPS` 設為代理層數（單層 nginx 就是 `1`）。附加語意下該 header 的最左值由用戶端提供，設了等於關掉限流。
 3. 僅對外開放 80/443，避免直接暴露 3000。
 4. 定期備份 Docker volume：SQLite 與 `uploads/` 必須一起備份。
 5. 增加 WAF／反向代理 rate limit，尤其是圖片上傳與留言端點。
@@ -288,7 +313,8 @@ trip.example.com {
 | `NUXT_DATABASE_PATH` | `./data/journey-unfinished.sqlite` | SQLite 檔案路徑 |
 | `NUXT_UPLOAD_DIR` | `./data/uploads` | 圖片儲存路徑 |
 | `NUXT_MAX_UPLOAD_BYTES` | `5242880` | 單張圖片大小上限 |
-| `NUXT_TRUST_PROXY` | `false` | 僅在 3000 埠不公開、且流量必經可信反向代理時設為 `true`，讓限流採用代理傳入 IP |
+| `NUXT_TRUSTED_PROXY_HOPS` | `0` | 應用前方的可信代理層數。`0` = 完全忽略 `X-Forwarded-For`（安全預設）；`N` = 取該 header 由右往左數第 N 筆當來源 IP。**代理必須覆寫而非附加該 header**，否則最左值由用戶端提供、限流可被繞過 |
+| `NUXT_TRUST_PROXY` | `false` | 相容路徑，等同 `NUXT_TRUSTED_PROXY_HOPS=1`。新部署請直接用 hops |
 | `NUXT_PUBLIC_APP_URL` | `http://localhost:3000` | 公開網站 Origin，正式環境必須是 HTTPS |
 | `NUXT_DISCORD_CLIENT_ID` | 無 | Discord Application Client ID |
 | `NUXT_DISCORD_CLIENT_SECRET` | 無 | Discord Application Client Secret |
@@ -300,10 +326,19 @@ trip.example.com {
 
 ## 上線前仍建議補強
 
-這份交付已要求 Discord 登入才能寫下旅箋，正式營運前仍建議加入：
+這份交付已要求 Discord 登入才能寫下旅箋、圖片會剝除 EXIF/GPS、作者可自刪旅箋、全站送出 CSP 等安全標頭。正式營運前仍建議加入：
 
-- 更細緻的擁有者編輯／刪除權限與帳號封鎖流程
-- Redis 或其他跨實例 rate limiting
-- 圖片重新解碼與移除 EXIF/GPS metadata
+- 擁有者**編輯**權限與帳號封鎖流程（目前只有刪除）
+- Redis 或其他跨實例 rate limiting（現行限流桶在 process 記憶體，重啟歸零，只在單 replica 下語意正確）
+- nonce-based CSP，以移除 `script-src`／`style-src` 的 `'unsafe-inline'`（目前受限於 Nuxt SSR 的 hydration payload 是 inline script）
 - 自動與人工內容審核、檢舉、封鎖與刪除流程
+- 上傳失敗的伺服器端記錄：`saveImage` 目前把 sharp 的錯誤轉成 415 回應且不留日誌，正式環境會難以診斷真正損毀的上傳
+- 第三方資源自架：Google Fonts 與 OpenStreetMap tiles 會把訪客 IP 送給第三方
 - 隱私政策、服務條款、版權申訴與備份還原演練
+
+### 已知取捨與行為
+
+- **動態 WebP 上傳後只保留第一幀**（sharp 未啟用 `animated`，這同時移除了以動畫消耗資源的途徑）。
+- **Unicode tag 字元（U+E0000–U+E007F）刻意不擋**。它們完全不可見、是夾帶隱藏文字的手法，但封鎖會連帶殺死 🏴󠁧󠁢󠁥󠁮󠁧󠁿 這類 tag sequence 旗幟 emoji。以本站的使用情境，誤殺正常 emoji 的代價高於防護收益。
+- **自刪限流是 per-IP 而非 per-user**，同一 NAT／CGNAT 出口的使用者共用每小時 20 次刪除額度。要改成 per-user，把 bucket key 換成 `user.id` 即可（該處已解析出使用者）。
+- **留言的換行數量沒有上限**，理論上可用大量 `\n` 拉長卡片。用 CSS `max-height` 處理比加驗證規則便宜。

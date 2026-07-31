@@ -10,6 +10,7 @@ data/uploads/*
 .env
 .env.*
 !.env.example
+deploy/k3s/deploy.env
 .DS_Store
 npm-debug.log*
 playwright-report/
