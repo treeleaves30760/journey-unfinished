@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { createError, deleteCookie, getCookie, getQuery, sendRedirect, setCookie } from 'h3'
 import { safeReturnPath } from '../../../utils/safeReturnPath'
-import { issueSession, OAUTH_RETURN_COOKIE, OAUTH_STATE_COOKIE, roleForDiscordId, secureEqual } from '../../utils/auth'
+import { issueSession, OAUTH_RETURN_COOKIE, OAUTH_STATE_COOKIE, secureEqual } from '../../utils/auth'
 import { upsertDiscordUser } from '../../utils/database'
 import { buildDiscordAuthorizationUrl, exchangeDiscordCode } from '../../utils/discord'
 
@@ -42,8 +42,7 @@ export default defineEventHandler(async (event) => {
       discordId: profile.discordId,
       username: profile.username,
       displayName: profile.displayName,
-      avatarUrl: profile.avatarUrl,
-      role: roleForDiscordId(event, profile.discordId)
+      avatarUrl: profile.avatarUrl
     })
     issueSession(event, user.id)
     return sendRedirect(event, returnTo, 302)

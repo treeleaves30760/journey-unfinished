@@ -23,6 +23,7 @@ import {
   clearAuthSession,
   getCurrentUser,
   hashToken,
+  isConfigAdmin,
   issueSession,
   requireAdmin,
   requireUser,
@@ -138,6 +139,20 @@ describe('authentication helpers', () => {
     expect(getCurrentUser(event)).toMatchObject({ id: 3, displayName: '回訪旅人' })
   })
 
+  it('merges the configured allowlist with the stored role', () => {
+    runtimeConfig.adminDiscordIds = '123456789012345678'
+    // 設定管理員：資料列說 user 也還是管理員，而且這一層標記成不可由網頁調整
+    expect(roleForDiscordId(event, '123456789012345678', 'user')).toBe('admin')
+    expect(isConfigAdmin(event, '123456789012345678')).toBe(true)
+    // 授權管理員：設定檔沒有他，權限完全來自資料列
+    expect(roleForDiscordId(event, '223456789012345678', 'admin')).toBe('admin')
+    expect(isConfigAdmin(event, '223456789012345678')).toBe(false)
+    // 兩層都不是
+    expect(roleForDiscordId(event, '223456789012345678', 'user')).toBe('user')
+    // 省略 storedRole 時只認設定檔那一層 —— 判斷不出來就往嚴格的方向倒
+    expect(roleForDiscordId(event, '223456789012345678')).toBe('user')
+  })
+
   it('enforces member and administrator authorization', () => {
     h3Mocks.getCookie.mockReturnValue(undefined)
     expect(() => requireUser(event)).toThrowError(expect.objectContaining({ statusCode: 401 }))
@@ -145,9 +160,18 @@ describe('authentication helpers', () => {
     h3Mocks.getCookie.mockReturnValue('member-token')
     databaseMocks.findUserBySession.mockReturnValue({
       id: 2, discordId: '223456789012345678', username: 'member', displayName: '會員', avatarUrl: null,
-      role: 'admin', createdAt: '', lastLoginAt: '', sessionExpiresAt: Date.now() + 1000
+      role: 'user', createdAt: '', lastLoginAt: '', sessionExpiresAt: Date.now() + 1000
     })
     expect(() => requireAdmin(event)).toThrowError(expect.objectContaining({ statusCode: 403 }))
+
+    // 這筆資料列原本寫的是 role: 'admin' 而斷言期待 403 —— 當時 users.role 完全不影響判斷，
+    // 那個斷言等於在保護「登入會覆寫 role」的舊行為。現在資料列正是授權管理員的來源，
+    // 所以改成用 'user' 測 403，並在下面補上「資料列說 admin 就過得去」。
+    databaseMocks.findUserBySession.mockReturnValue({
+      id: 3, discordId: '323456789012345678', username: 'granted', displayName: '受權管理員', avatarUrl: null,
+      role: 'admin', createdAt: '', lastLoginAt: '', sessionExpiresAt: Date.now() + 1000
+    })
+    expect(requireAdmin(event)).toMatchObject({ id: 3, role: 'admin' })
   })
 
   it('issues a hashed, secure and bounded session while revoking the previous token', () => {

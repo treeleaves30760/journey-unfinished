@@ -28,8 +28,22 @@ export function adminDiscordIds(event: H3Event) {
     .filter(value => /^\d{17,20}$/.test(value)))
 }
 
-export function roleForDiscordId(event: H3Event, discordId: string): 'user' | 'admin' {
-  return adminDiscordIds(event).has(discordId) ? 'admin' : 'user'
+/**
+ * 「設定管理員」：由 NUXT_ADMIN_DISCORD_IDS 指定的那一層，刻意不開放網頁調整。
+ * 兩個理由：設定檔是這層的權威來源，UI 沒有權力覆寫它；而且它是防鎖死的保底 ——
+ * 就算有人把資料庫裡的管理員全部移除（誤操作或被入侵後的清場），
+ * 設定管理員仍然進得去，可以重新指派其他人。
+ */
+export function isConfigAdmin(event: H3Event, discordId: string) {
+  return adminDiscordIds(event).has(discordId)
+}
+
+/**
+ * 兩層管理員取聯集：設定管理員（環境變數）或授權管理員（users.role = 'admin'）。
+ * storedRole 預設 'user'，讓拿不到資料列的呼叫端只認設定檔那一層 —— 判斷不出來時往嚴格的方向倒。
+ */
+export function roleForDiscordId(event: H3Event, discordId: string, storedRole: 'user' | 'admin' = 'user'): 'user' | 'admin' {
+  return isConfigAdmin(event, discordId) || storedRole === 'admin' ? 'admin' : 'user'
 }
 
 function publicUser(event: H3Event, user: User): PublicUser {
@@ -38,7 +52,8 @@ function publicUser(event: H3Event, user: User): PublicUser {
     displayName: user.displayName,
     username: user.username,
     avatarUrl: user.avatarUrl,
-    role: roleForDiscordId(event, user.discordId)
+    // 每次請求都重算，所以在網頁上被降級的管理員不需要等 session 過期就會立刻失去權限
+    role: roleForDiscordId(event, user.discordId, user.role)
   }
 }
 
