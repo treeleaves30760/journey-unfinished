@@ -20,6 +20,10 @@ export default defineNuxtConfig({
     uploadDir: './data/uploads',
     maxUploadBytes: 5_242_880,
     trustProxy: false,
+    // 0 代表完全忽略 X-Forwarded-For（安全預設，來源 IP 一律取 socket 位址，任何人都無法偽造）；
+    // 設為 N 代表應用前面有 N 層可信代理，來源 IP 取 XFF 由右往左數第 N 筆
+    // （左邊的欄位是上游隨手加的、可被客戶端偽造，只有最右邊 N 筆是自家代理寫的）。
+    trustedProxyHops: 0,
     discordClientId: '',
     discordClientSecret: '',
     discordRedirectUri: '',
