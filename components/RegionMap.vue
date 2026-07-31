@@ -12,10 +12,20 @@ interface RegionView {
   bounds?: [[number, number], [number, number]]
 }
 
+// 讓外部（例如全螢幕探索頁的側欄）指定地圖要飛過去的座標。用一般物件而不是 [lat, lng] 陣列，
+// 是因為每次點擊都會指派「一個新物件」，watcher 靠參照變化就知道要重新 flyTo —— 就算兩次
+// 點的是同一筆旅箋、座標完全相同，也還是會觸發飛行動畫，不必額外設計 id/nonce 欄位。
+interface FocusTarget {
+  lat: number
+  lng: number
+  zoom?: number
+}
+
 const props = withDefaults(defineProps<{
   checkins: Checkin[]
   selectedId?: number | null
   region?: RegionView
+  focusTarget?: FocusTarget | null
 }>(), {
   selectedId: null,
   region: () => ({
@@ -26,7 +36,8 @@ const props = withDefaults(defineProps<{
     minZoom: 6,
     maxZoom: 18,
     bounds: [[20.4, 117.7], [26.9, 123.8]]
-  })
+  }),
+  focusTarget: null
 })
 
 const emit = defineEmits<{ select: [checkin: Checkin] }>()
@@ -143,6 +154,10 @@ watch(() => props.selectedId, () => {
   if (props.selectedId) markers.get(props.selectedId)?.openTooltip()
 })
 watch(() => props.region, applyRegion, { deep: true })
+watch(() => props.focusTarget, (target) => {
+  if (!target || !map.value) return
+  map.value.flyTo([target.lat, target.lng], target.zoom ?? map.value.getZoom(), { duration: 0.85 })
+})
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
@@ -150,6 +165,15 @@ onBeforeUnmount(() => {
   map.value?.remove()
   map.value = null
   markers.clear()
+})
+
+/**
+ * 讓外部（全螢幕探索頁收合／展開側欄時）可以明確要求重新量測地圖容器尺寸。
+ * 元件內部的 ResizeObserver 理論上已經會在容器尺寸改變時自動呼叫 invalidateSize，
+ * 這裡多開放一個方法純粹是保險，不影響現有任何呼叫方式（首頁完全不需要用到它）。
+ */
+defineExpose({
+  invalidateSize: () => map.value?.invalidateSize()
 })
 </script>
 
