@@ -28,15 +28,25 @@ cp -a /etc/nginx/conf.d "$BACKUP/"
 cp -a /etc/nginx/sites-enabled "$BACKUP/" 2>/dev/null || true
 
 echo "==> 修正 X-Forwarded-Proto"
+# 不要用 find 的 -o 串條件：`-type f -name '*.conf' -o -type f -path ... -print0`
+# 會被解析成 (A and B) or (C and D and print0)，-print0 只綁在第二個分支上，
+# conf.d/*.conf 會整批靜默消失。單純的 glob 迴圈沒有這種優先序陷阱。
 changed=0
-while IFS= read -r -d '' conf; do
-  if grep -q 'X-Forwarded-Proto \$http_x_forwarded_proto' "$conf"; then
-    sed -i 's/X-Forwarded-Proto \$http_x_forwarded_proto/X-Forwarded-Proto $scheme/g' "$conf"
-    echo "    修正 $conf"
+scanned=0
+for conf in /etc/nginx/conf.d/*.conf /etc/nginx/sites-enabled/*; do
+  [ -e "$conf" ] || continue
+  # sites-enabled 慣例上是指向 sites-available 的符號連結；直接 sed -i 會把連結
+  # 換成實體檔案，讓兩邊從此各走各的。先解析成真實路徑再改。
+  target="$(readlink -f "$conf")"
+  [ -f "$target" ] || continue
+  scanned=$((scanned + 1))
+  if grep -q 'X-Forwarded-Proto[[:space:]]*\$http_x_forwarded_proto' "$target"; then
+    sed -i 's/X-Forwarded-Proto\([[:space:]]*\)\$http_x_forwarded_proto/X-Forwarded-Proto\1$scheme/g' "$target"
+    echo "    修正 $conf${target:+ -> $target}"
     changed=$((changed + 1))
   fi
-done < <(find /etc/nginx/conf.d /etc/nginx/sites-enabled -type f -name '*.conf' -o -type f -path '*sites-enabled/*' -print0 2>/dev/null | sort -z)
-echo "    共 ${changed} 個檔案"
+done
+echo "    掃描 ${scanned} 個檔案，修正 ${changed} 個"
 
 echo "==> 安裝 Cloudflare real_ip 設定"
 install -m 0644 "$HERE/nginx-cloudflare-realip.conf.example" /etc/nginx/conf.d/cloudflare-realip.conf
@@ -47,6 +57,16 @@ nginx -t
 
 echo "==> reload"
 systemctl reload nginx
+
+echo "==> 驗證：載入中的設定不應再有 \$http_x_forwarded_proto"
+remaining=$(grep -rl 'X-Forwarded-Proto[[:space:]]*\$http_x_forwarded_proto' \
+  /etc/nginx/conf.d/*.conf /etc/nginx/sites-enabled/* 2>/dev/null | grep -v '/journey.conf$' || true)
+if [ -n "$remaining" ]; then
+  echo "    仍有殘留（請人工確認）：" >&2
+  echo "$remaining" | sed 's/^/      /' >&2
+else
+  echo "    乾淨"
+fi
 
 echo
 echo "完成。回滾方式："
