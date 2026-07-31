@@ -55,6 +55,24 @@ function selectCheckin(checkin: Checkin) {
   selected.value = checkin
 }
 
+// 全螢幕探索頁的入口：支援 View Transitions API 時，用原生 API 把這張地圖卡片「展開」成
+// /map 整頁；不支援，或使用者開了「減少動態效果」，就退化成一般導覽，不強行補動畫。
+async function goFullscreenMap() {
+  const skipTransition = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    || typeof document.startViewTransition !== 'function'
+  if (skipTransition) {
+    await navigateTo('/map')
+    return
+  }
+  // 讓 /map 知道這次進場已經由 View Transition 負責畫面過場，它自己就不會再疊加一次
+  // CSS 進場動畫（見 pages/map.vue 開頭對 map-enter-transition 這個 useState 的說明）。
+  useState('map-enter-transition', () => false).value = true
+  document.startViewTransition(async () => {
+    await navigateTo('/map')
+    await nextTick()
+  })
+}
+
 function clearFilters() {
   county.value = '全部地區'
   seriesFilter.value = '全部作品'
@@ -147,6 +165,9 @@ onBeforeUnmount(() => panelObserver?.disconnect())
               </template>
             </ClientOnly>
             <p class="map-hint"><span aria-hidden="true">◎</span> 點擊地圖上的頭像，翻開旅人寫下的旅箋</p>
+            <button type="button" class="secondary-button compact map-expand-trigger" @click="goFullscreenMap">
+              <span aria-hidden="true">⛶</span> 全螢幕探索地圖
+            </button>
           </div>
           <aside class="map-side panel-enter from-right" aria-label="地圖旅箋摘要" aria-live="polite">
             <div class="map-side-title"><span>精選旅箋</span><small>{{ filtered.length }} 個地點</small></div>
@@ -199,3 +220,10 @@ onBeforeUnmount(() => panelObserver?.disconnect())
   </main>
 </template>
 
+<style scoped>
+/* 讓支援 View Transitions API 的瀏覽器把這張地圖卡片「長成」/map 整頁（詳見
+   pages/map.vue 同名的 view-transition-name 設定）；不支援的瀏覽器這個屬性單純不會被
+   用到，不影響版面。 */
+.map-panel { view-transition-name: checkin-map-expand; }
+.map-expand-trigger { align-self: center; margin-top: 10px; }
+</style>
