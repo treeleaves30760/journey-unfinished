@@ -7,6 +7,7 @@ export interface Checkin {
   latitude: number
   longitude: number
   dollName: string
+  series: string | null
   message: string
   visitedAt: string
   photo: string | null
@@ -55,6 +56,12 @@ export function formatCommentDate(value: string) {
   return new Intl.DateTimeFormat('zh-TW', {
     year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Taipei'
   }).format(new Date(`${value.replace(' ', 'T').replace(/Z$/, '')}Z`))
+}
+
+// 探索頁關鍵字搜尋共用的正規化：NFC 讓組合字元與預合成字元視為同一個字（同一個 'é' 不會因為
+// 輸入法送出的編碼不同就搜不到），toLowerCase 讓比對與大小寫無關。
+export function normalizeSearchText(value: string) {
+  return value.normalize('NFC').toLowerCase()
 }
 
 export function errorMessage(error: unknown, fallback = '發生未預期的錯誤，請稍後再試。') {

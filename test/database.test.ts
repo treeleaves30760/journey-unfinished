@@ -37,6 +37,7 @@ const input: CheckinInput = {
   latitude: 25.033,
   longitude: 121.5654,
   dollName: '測試娃',
+  series: '測試作品',
   message: '這是一段測試旅程。',
   visitedAt: '2026-01-01',
   avatarPreset: 'sun'
@@ -56,10 +57,15 @@ describe('SQLite schema and migrations', () => {
     const commentForeignKey = db.prepare('PRAGMA foreign_key_list(comments)').all() as Array<{ from: string, on_delete: string }>
     expect(checkinForeignKey).toContainEqual(expect.objectContaining({ from: 'user_id', on_delete: 'SET NULL' }))
     expect(commentForeignKey).toContainEqual(expect.objectContaining({ from: 'checkin_id', on_delete: 'CASCADE' }))
+    const checkinColumnNames = (db.prepare('PRAGMA table_info(checkins)').all() as Array<{ name: string }>).map(column => column.name)
+    expect(checkinColumnNames).toEqual(expect.arrayContaining(['user_id', 'series']))
     expect(database.listCheckins()).toHaveLength(6)
     const firstId = Math.min(...database.listCheckins().map(checkin => checkin.id))
     expect(database.listComments(firstId)).toHaveLength(1)
     expect(database.listCheckins().every(checkin => checkin.userId === null)).toBe(true)
+    // 種子資料是站方聲明的原創創作（見首頁頁尾「本站示意內容與頭像皆為原創」），
+    // 全部都不該帶作品出處——這也順便釘住「留空要存 null」不會被悄悄改回空字串。
+    expect(database.listCheckins().every(checkin => checkin.series === null)).toBe(true)
 
     db.prepare('DELETE FROM checkins').run()
     database.closeDatabaseForTests()
@@ -102,9 +108,11 @@ describe('SQLite schema and migrations', () => {
     const database = await loadDatabase(filename)
     const records = database.listCheckins()
     expect(records).toHaveLength(1)
-    expect(records[0]).toMatchObject({ nickname: '舊旅人', location: '舊景點', userId: null })
+    // series 是這次遷移新加的欄位，舊資料列理所當然沒填過，必須補成 null 而不是空字串或 undefined。
+    expect(records[0]).toMatchObject({ nickname: '舊旅人', location: '舊景點', userId: null, series: null })
     const columns = database.getDatabase().prepare('PRAGMA table_info(checkins)').all() as Array<{ name: string }>
     expect(columns.some(column => column.name === 'user_id')).toBe(true)
+    expect(columns.some(column => column.name === 'series')).toBe(true)
     expect(database.getDatabase().prepare("SELECT value FROM app_meta WHERE key = 'demo_seeded'").get()).toEqual({ value: 'legacy' })
 
     database.closeDatabaseForTests()
@@ -130,6 +138,7 @@ describe('users, ownership and sessions', () => {
     })
     const checkin = database.createCheckin(input, '/uploads/photo-test.jpg', null, user.id)
     expect(checkin.userId).toBe(user.id)
+    expect(checkin.series).toBe('測試作品')
     database.createComment(checkin.id, '留言者', '會一起被刪除')
     expect(database.listComments(checkin.id)).toHaveLength(1)
     expect(database.deleteCheckin(checkin.id)).toBe(true)

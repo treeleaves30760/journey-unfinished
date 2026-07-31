@@ -76,7 +76,7 @@ useHead(() => ({ title: data.value ? `${data.value.checkin.location}｜未完旅
           <h1>{{ data.checkin.location }}</h1>
           <div class="detail-author"><DollAvatar :src="data.checkin.avatar" :preset="data.checkin.avatarPreset" :alt="`${data.checkin.nickname}的頭像`" size="medium" /><div><strong>{{ data.checkin.nickname }} 與 {{ data.checkin.dollName }}</strong><time :datetime="data.checkin.visitedAt">{{ formatDate(data.checkin.visitedAt) }}</time></div></div>
           <blockquote>「{{ data.checkin.message }}」</blockquote>
-          <dl class="detail-facts"><div><dt>旅行地點</dt><dd>{{ data.checkin.county }}・{{ data.checkin.location }}</dd></div><div><dt>地圖座標</dt><dd>{{ data.checkin.latitude.toFixed(5) }}, {{ data.checkin.longitude.toFixed(5) }}</dd></div></dl>
+          <dl class="detail-facts"><div><dt>旅行地點</dt><dd>{{ data.checkin.county }}・{{ data.checkin.location }}</dd></div><div><dt>地圖座標</dt><dd>{{ data.checkin.latitude.toFixed(5) }}, {{ data.checkin.longitude.toFixed(5) }}</dd></div><div v-if="data.checkin.series"><dt>作品出處</dt><dd>{{ data.checkin.series }}</dd></div></dl>
           <div v-if="canDelete" class="form-submit">
             <div v-if="deleteError" class="inline-error" role="alert">{{ deleteError }}</div>
             <p v-else>刪除後，這頁的照片與地點座標會一併從網站上移除，且無法復原。</p>

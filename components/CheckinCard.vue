@@ -17,6 +17,7 @@ defineProps<{ checkin: Checkin }>()
         <div><strong>{{ checkin.nickname }}・{{ checkin.dollName }}</strong><time :datetime="checkin.visitedAt">{{ formatDate(checkin.visitedAt) }}</time></div>
       </div>
       <NuxtLink :to="`/checkins/${checkin.id}`"><h3>{{ checkin.location }}</h3></NuxtLink>
+      <small v-if="checkin.series" class="card-series">✎ {{ checkin.series }}</small>
       <p>{{ checkin.message }}</p>
       <div class="card-meta"><span>⌖ {{ checkin.county }}</span><span>♡ {{ checkin.commentCount }} 則留言</span></div>
     </div>

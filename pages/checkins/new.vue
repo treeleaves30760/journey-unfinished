@@ -14,7 +14,7 @@ function taiwanDateInput() {
 const today = taiwanDateInput()
 const form = reactive({
   nickname: '', location: '', county: '', latitude: null as number | null, longitude: null as number | null,
-  dollName: '', message: '', visitedAt: today, avatarPreset: 'sun'
+  dollName: '', series: '', message: '', visitedAt: today, avatarPreset: 'sun'
 })
 const photoInput = ref<HTMLInputElement | null>(null)
 const photo = ref<File | null>(null)
@@ -133,6 +133,7 @@ useHead({ title: '寫下這一站｜未完旅箋' })
             <label class="field"><span>你的暱稱 <b>*</b></span><input v-model.trim="form.nickname" required maxlength="30" autocomplete="nickname" placeholder="例如：小晴"></label>
             <label class="field"><span>娃娃名稱 <b>*</b></span><input v-model.trim="form.dollName" required maxlength="40" placeholder="例如：暖暖"></label>
           </div>
+          <label class="field"><span>作品出處 <small>原創娃娃可以留空</small></span><input v-model.trim="form.series" maxlength="60" placeholder="這隻娃娃出自哪部作品？"></label>
           <fieldset class="avatar-fieldset">
             <legend>選擇原創頭像 <small>上傳自訂頭像後會優先顯示</small></legend>
             <div class="avatar-options">
