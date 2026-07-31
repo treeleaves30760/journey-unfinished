@@ -36,6 +36,10 @@ let database: SQLiteDatabase | undefined
 const DATABASE_FILENAME = 'journey-unfinished.sqlite'
 const LEGACY_DATABASE_FILENAME = 'wa-trip.sqlite'
 
+// 四個查詢共用同一份欄位清單，欄位增減時不會有人漏掉其中一個而讓回傳形狀分岔
+const userColumns = `id, discord_id AS discordId, username, display_name AS displayName,
+  avatar_url AS avatarUrl, role, created_at AS createdAt, last_login_at AS lastLoginAt`
+
 const baseSelect = `
   SELECT c.id, c.user_id AS userId, c.nickname, c.location, c.county,
     c.latitude, c.longitude, c.doll_name AS dollName,
@@ -192,28 +196,34 @@ export function createComment(checkinId: number, nickname: string, message: stri
   ).get(result.lastInsertRowid) as Comment
 }
 
+/**
+ * 這裡完全不碰 role —— 登入既不寫入也不覆寫它。兩層管理員因此互不汙染：
+ *
+ * - 設定管理員（NUXT_ADMIN_DISCORD_IDS）純粹在每次請求時計算，從不落地。
+ *   把某人從環境變數移除，下一個請求就立刻失去管理權，不會有殘留。
+ * - 授權管理員（users.role）只由 setUserRole 寫入，也就是只由管理頁授權。
+ *   重新登入不會把它洗掉。
+ *
+ * 若讓登入寫入由環境變數推導的 role，設定管理員第一次登入就會把 'admin'
+ * 固化進資料列，之後從環境變數移除他也撤銷不掉 —— 文件寫的撤銷方式會靜默失效。
+ * INSERT 不列 role 欄位，交給 schema 的 DEFAULT 'user'。
+ */
 export function upsertDiscordUser(input: {
   discordId: string
   username: string
   displayName: string
   avatarUrl: string | null
-  role: 'user' | 'admin'
 }): User {
   getDatabase().prepare(`
-    INSERT INTO users (discord_id, username, display_name, avatar_url, role)
-    VALUES (@discordId, @username, @displayName, @avatarUrl, @role)
+    INSERT INTO users (discord_id, username, display_name, avatar_url)
+    VALUES (@discordId, @username, @displayName, @avatarUrl)
     ON CONFLICT(discord_id) DO UPDATE SET
       username = excluded.username,
       display_name = excluded.display_name,
       avatar_url = excluded.avatar_url,
-      role = excluded.role,
       last_login_at = CURRENT_TIMESTAMP
   `).run(input)
-  return getDatabase().prepare(`
-    SELECT id, discord_id AS discordId, username, display_name AS displayName,
-      avatar_url AS avatarUrl, role, created_at AS createdAt, last_login_at AS lastLoginAt
-    FROM users WHERE discord_id = ?
-  `).get(input.discordId) as User
+  return getDatabase().prepare(`SELECT ${userColumns} FROM users WHERE discord_id = ?`).get(input.discordId) as User
 }
 
 export function createAuthSession(tokenHash: string, userId: number, expiresAt: number) {
@@ -238,11 +248,20 @@ export function deleteAuthSession(tokenHash: string) {
 }
 
 export function listUsers(): User[] {
-  return getDatabase().prepare(`
-    SELECT id, discord_id AS discordId, username, display_name AS displayName,
-      avatar_url AS avatarUrl, role, created_at AS createdAt, last_login_at AS lastLoginAt
-    FROM users ORDER BY last_login_at DESC, id DESC
-  `).all() as User[]
+  return getDatabase().prepare(`SELECT ${userColumns} FROM users ORDER BY last_login_at DESC, id DESC`).all() as User[]
+}
+
+export function findUserById(id: number): User | undefined {
+  return getDatabase().prepare(`SELECT ${userColumns} FROM users WHERE id = ?`).get(id) as User | undefined
+}
+
+/**
+ * 授權管理員這一層的唯一寫入點。role 走參數繫結，且 users.role 有 CHECK 約束把關，
+ * 就算呼叫端漏了驗證也寫不進第三種值。回傳更新後的資料列；資料列已不存在時回 undefined。
+ */
+export function setUserRole(id: number, role: 'user' | 'admin'): User | undefined {
+  getDatabase().prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id)
+  return findUserById(id)
 }
 
 export function closeDatabaseForTests() {

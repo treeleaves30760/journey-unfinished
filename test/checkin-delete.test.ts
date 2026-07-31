@@ -114,10 +114,9 @@ async function loadContext() {
       discordId,
       username: displayName,
       displayName,
-      avatarUrl: null,
-      // 真正決定 role 的是 runtimeConfig.adminDiscordIds（見 auth.ts 的 publicUser），
-      // 這裡寫進資料列只是為了讓資料保持一致。
-      role: discordId === ADMIN_DISCORD_ID ? 'admin' : 'user'
+      avatarUrl: null
+      // 登入不寫 role，資料列一律是 DEFAULT 'user'。這個檔案裡的管理員身分
+      // 完全來自 runtimeConfig.adminDiscordIds 那一層（見 auth.ts 的 publicUser）。
     })
     const token = `session-token-${discordId}`
     database.createAuthSession(auth.hashToken(token), user.id, Date.now() + 3_600_000)

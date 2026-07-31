@@ -987,6 +987,13 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 .admin-checkins article > div strong, .admin-checkins article > div span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-checkins article > div span { color: var(--muted); font-size: .72rem; }
 .danger-button { min-height: 38px; padding: 7px 12px; color: var(--danger); border: 1px solid #edbec7; border-radius: 10px; cursor: pointer; background: #fce7ea; font-size: .73rem; font-weight: 800; }
+.admin-role-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+/* 設定管理員不是第三種角色，是「這一層改不動」的註記，用中性外框和角色 badge 區隔 */
+.role-badge.config { color: var(--muted); border: 1px solid var(--line-strong); background: transparent; }
+.admin-role-note { display: block; max-width: 250px; margin-top: 6px; color: var(--muted); font-size: .7rem; line-height: 1.6; }
+/* 這裡的停用來自規則（自己／設定管理員），不是等待中，不該沿用 :disabled 的 wait 游標 */
+.admin-role-toggle:disabled { cursor: not-allowed; }
+.admin-table-wrap .inline-error { max-width: 250px; margin-top: 6px; }
 
 /* Keep the creation form comfortable before it reaches tablet widths. */
 @media (max-width: 1100px) {

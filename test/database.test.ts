@@ -126,7 +126,7 @@ describe('users, ownership and sessions', () => {
   it('stores creator ownership and enforces delete cascades', async () => {
     const database = await loadDatabase(temporaryDatabase())
     const user = database.upsertDiscordUser({
-      discordId: '123456789012345678', username: 'owner', displayName: '足跡主人', avatarUrl: null, role: 'user'
+      discordId: '123456789012345678', username: 'owner', displayName: '足跡主人', avatarUrl: null
     })
     const checkin = database.createCheckin(input, '/uploads/photo-test.jpg', null, user.id)
     expect(checkin.userId).toBe(user.id)
@@ -140,20 +140,64 @@ describe('users, ownership and sessions', () => {
   it('sets ownership to null and removes sessions when a user is deleted', async () => {
     const database = await loadDatabase(temporaryDatabase())
     const user = database.upsertDiscordUser({
-      discordId: '223456789012345678', username: 'member', displayName: '會員', avatarUrl: null, role: 'admin'
+      discordId: '223456789012345678', username: 'member', displayName: '會員', avatarUrl: null
     })
     const checkin = database.createCheckin(input, null, null, user.id)
     database.createAuthSession('active-hash', user.id, Date.now() + 60_000)
-    expect(database.findUserBySession('active-hash')).toMatchObject({ id: user.id, role: 'admin' })
+    // role 必須被投影出來：publicUser 靠它算出合併後的角色，漏掉這個欄位授權管理員就會失效
+    expect(database.findUserBySession('active-hash')).toMatchObject({ id: user.id, role: 'user' })
     database.getDatabase().prepare('DELETE FROM users WHERE id = ?').run(user.id)
     expect(database.findCheckin(checkin.id)?.userId).toBeNull()
     expect(database.findUserBySession('active-hash')).toBeUndefined()
   })
 
+  it('never writes role on login, so grants survive and config admins never persist', async () => {
+    const database = await loadDatabase(temporaryDatabase())
+    const created = database.upsertDiscordUser({
+      discordId: '423456789012345678', username: 'granted', displayName: '受權管理員', avatarUrl: null
+    })
+    // 登入一律以一般會員建立資料列。setUserRole（也就是管理頁）是 users.role 的唯一寫入點。
+    expect(created.role).toBe('user')
+    expect(database.setUserRole(created.id, 'admin')).toMatchObject({ id: created.id, role: 'admin' })
+
+    // 再登入一次。若 ON CONFLICT 分支動到 role，網頁上授權的管理員一登出再登入就會被打回一般會員。
+    const returning = database.upsertDiscordUser({
+      discordId: '423456789012345678', username: 'renamed', displayName: '改名後', avatarUrl: 'https://cdn.example/a.png'
+    })
+    expect(returning).toMatchObject({ id: created.id, role: 'admin' })
+    // 其餘個人資料仍然要跟著 Discord 更新，不能為了保住 role 就整排不動
+    expect(returning).toMatchObject({ username: 'renamed', displayName: '改名後', avatarUrl: 'https://cdn.example/a.png' })
+    expect(database.listUsers().find(user => user.id === created.id)).toMatchObject({ role: 'admin' })
+
+    // 設定管理員（NUXT_ADMIN_DISCORD_IDS）的身分絕不能落地。一旦第一次登入把 'admin' 固化進
+    // 資料列，之後把他從環境變數移除就撤銷不掉 —— 文件寫的撤銷方式會靜默失效。
+    const configAdmin = database.upsertDiscordUser({
+      discordId: '523456789012345678', username: 'config-admin', displayName: '站長', avatarUrl: null
+    })
+    expect(configAdmin.role).toBe('user')
+    expect(database.upsertDiscordUser({
+      discordId: '523456789012345678', username: 'config-admin', displayName: '站長', avatarUrl: null
+    })).toMatchObject({ role: 'user' })
+  })
+
+  it('looks users up by id and refuses a role outside the schema allowlist', async () => {
+    const database = await loadDatabase(temporaryDatabase())
+    expect(database.findUserById(999_999)).toBeUndefined()
+    expect(database.setUserRole(999_999, 'admin')).toBeUndefined()
+
+    const user = database.upsertDiscordUser({
+      discordId: '623456789012345678', username: 'member', displayName: '會員', avatarUrl: null
+    })
+    expect(database.findUserById(user.id)).toMatchObject({ id: user.id, discordId: '623456789012345678', role: 'user' })
+    // users.role 的 CHECK 約束是最後一道防線：呼叫端漏掉驗證也寫不進第三種值
+    expect(() => database.setUserRole(user.id, 'owner' as 'user')).toThrowError()
+    expect(database.findUserById(user.id)?.role).toBe('user')
+  })
+
   it('treats the expiry boundary as invalid and cleans stale sessions on creation', async () => {
     const database = await loadDatabase(temporaryDatabase())
     const user = database.upsertDiscordUser({
-      discordId: '323456789012345678', username: 'session-user', displayName: 'Session 會員', avatarUrl: null, role: 'user'
+      discordId: '323456789012345678', username: 'session-user', displayName: 'Session 會員', avatarUrl: null
     })
     const now = Date.now()
     database.createAuthSession('expired-hash', user.id, now)
