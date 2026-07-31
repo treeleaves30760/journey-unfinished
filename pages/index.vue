@@ -49,7 +49,14 @@ const hasActiveFilters = computed(() =>
 )
 const totalComments = computed(() => checkins.value.reduce((sum, item) => sum + item.commentCount, 0))
 const createTarget = computed(() => user.value ? '/checkins/new' : '/login?redirect=/checkins/new')
-const panelLabels = ['旅箋首頁', '探索地圖', '沿途新頁', '寫下旅箋']
+// 右側分頁導覽：編號旁再補兩個字說明這一段在做什麼，光看 01–04 猜不出用途。
+// aria-label 仍然用完整名稱，螢幕閱讀器聽到的會比兩個字更完整。
+const panelSections = [
+  { short: '首頁', label: '旅箋首頁' },
+  { short: '地圖', label: '探索地圖' },
+  { short: '旅箋', label: '沿途新頁' },
+  { short: '寫下', label: '寫下旅箋' }
+]
 
 function selectCheckin(checkin: Checkin) {
   selected.value = checkin
@@ -164,10 +171,10 @@ onBeforeUnmount(() => panelObserver?.disconnect())
                 <div class="map-loading" role="status"><i class="loader" />正在載入 OpenStreetMap…</div>
               </template>
             </ClientOnly>
-            <p class="map-hint"><span aria-hidden="true">◎</span> 點擊地圖上的頭像，翻開旅人寫下的旅箋</p>
-            <button type="button" class="secondary-button compact map-expand-trigger" @click="goFullscreenMap">
-              <span aria-hidden="true">⛶</span> 全螢幕探索地圖
+            <button type="button" class="primary-button map-expand-trigger" @click="goFullscreenMap">
+              <span aria-hidden="true">⛶</span> 開啟大地圖
             </button>
+            <p class="map-hint"><span aria-hidden="true">◎</span> 點擊地圖上的頭像，翻開旅人寫下的旅箋</p>
           </div>
           <aside class="map-side panel-enter from-right" aria-label="地圖旅箋摘要" aria-live="polite">
             <div class="map-side-title"><span>精選旅箋</span><small>{{ filtered.length }} 個地點</small></div>
@@ -208,14 +215,30 @@ onBeforeUnmount(() => panelObserver?.disconnect())
     <section ref="ctaPanel" class="home-panel cta-panel" :class="{ 'is-active': activePanel === 3 }" data-panel="3">
       <div class="cta-section">
         <div class="cta-doodle left panel-enter from-left" aria-hidden="true">✿</div>
-        <div class="cta-copy panel-enter from-bottom"><span class="eyebrow">YOUR NEXT PAGE</span><h2>下一頁，與你一起寫</h2><p>帶上心愛的小小旅伴，去往下一站，把共同看過的風景留在這裡。</p><NuxtLink class="primary-button light" :to="createTarget">{{ user ? '＋ 寫下這一站' : '使用 Discord 登入' }}</NuxtLink></div>
+        <div class="cta-copy panel-enter from-bottom">
+          <span class="eyebrow">YOUR NEXT PAGE</span>
+          <h2>下一頁，與你一起寫</h2>
+          <p>帶上心愛的小小旅伴，去往下一站，把共同看過的風景留在這裡。三個步驟，就能把這一天留成一頁旅箋。</p>
+          <ol class="cta-steps">
+            <li><b>01</b><strong>選一張旅伴頭像</strong><span>上傳自己拍的照片，或直接挑現成頭像，旅伴就住進地圖裡。</span></li>
+            <li><b>02</b><strong>標上抵達的地點</strong><span>在地圖上點一下，或搜尋店名與景點，座標會自動補齊。</span></li>
+            <li><b>03</b><strong>寫下當下的心情</strong><span>幾句話、一張合照，都會成為別人翻開這一站時看見的風景。</span></li>
+          </ol>
+          <div class="cta-actions">
+            <NuxtLink class="primary-button light" :to="createTarget">{{ user ? '＋ 寫下這一站' : '使用 Discord 登入' }}</NuxtLink>
+            <button type="button" class="cta-ghost-button" @click="scrollToPanel(1)"><span aria-hidden="true">↑</span> 先逛逛地圖</button>
+          </div>
+          <p class="cta-footnote">
+            目前收藏 <strong>{{ checkins.length }}</strong> 則旅箋 · 走過 <strong>{{ availableCounties.length }}</strong> 個縣市 · 留下 <strong>{{ totalComments }}</strong> 份交流
+          </p>
+        </div>
         <div class="cta-doodle right panel-enter from-right" aria-hidden="true">✦</div>
       </div>
       <footer class="home-panel-footer"><strong>未完旅箋</strong><span>小小的你，世界很大。</span><small>本站示意內容與頭像皆為原創。</small></footer>
     </section>
 
     <nav class="page-dots" aria-label="首頁分頁導覽">
-      <button v-for="(label, index) in panelLabels" :key="label" type="button" :class="{ active: activePanel === index }" :aria-label="`前往${label}`" :aria-current="activePanel === index ? 'page' : undefined" @click="scrollToPanel(index)"><span>{{ String(index + 1).padStart(2, '0') }}</span><i /></button>
+      <button v-for="(section, index) in panelSections" :key="section.label" type="button" :class="{ active: activePanel === index }" :aria-label="`前往${section.label}`" :aria-current="activePanel === index ? 'page' : undefined" @click="scrollToPanel(index)"><span>{{ String(index + 1).padStart(2, '0') }}</span><em>{{ section.short }}</em><i /></button>
     </nav>
   </main>
 </template>
@@ -224,6 +247,19 @@ onBeforeUnmount(() => panelObserver?.disconnect())
 /* 讓支援 View Transitions API 的瀏覽器把這張地圖卡片「長成」/map 整頁（詳見
    pages/map.vue 同名的 view-transition-name 設定）；不支援的瀏覽器這個屬性單純不會被
    用到，不影響版面。 */
-.map-panel { view-transition-name: checkin-map-expand; }
-.map-expand-trigger { align-self: center; margin-top: 10px; }
+.map-panel { position: relative; view-transition-name: checkin-map-expand; }
+/* 前往全螢幕地圖的入口浮在地圖右上角：那個角落沒有 Leaflet 內建控制項（縮放在左上、
+   版權在右下），做成實心按鈕才不會被底下的圖磚吃掉，也把原本墊在地圖下方的一整列高度
+   還給地圖本身。外圈的白色 ring 是為了在深色圖磚上仍然看得見邊界。 */
+.map-expand-trigger {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 5;
+  min-height: 44px;
+  padding: 10px 18px;
+  font-size: .88rem;
+  box-shadow: 0 12px 26px rgb(74 45 55 / 30%), 0 0 0 4px rgb(255 255 255 / 78%);
+}
+.map-expand-trigger span { font-size: 1rem; }
 </style>
