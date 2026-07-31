@@ -298,7 +298,7 @@ useHead({ title: '管理中心｜未完旅箋' })
 
 <template>
   <main id="main-content" class="admin-page">
-    <div class="admin-heading"><div><span class="eyebrow">ADMIN CONSOLE</span><h1>管理中心</h1><p>檢視 Discord 會員、調整管理員權限與管理公開旅箋。</p></div><NuxtLink class="primary-button" to="/checkins/new">＋ 寫下旅箋</NuxtLink></div>
+    <div class="admin-heading"><div><span class="eyebrow">ADMIN CONSOLE</span><h1>管理中心</h1><p>檢視 Discord 會員、調整管理員權限與管理公開旅箋。</p></div><NuxtLink class="secondary-button" to="/admin/stats">統計數據</NuxtLink><NuxtLink class="primary-button" to="/checkins/new">＋ 寫下旅箋</NuxtLink></div>
     <div v-if="status === 'pending'" class="state-panel" role="status"><i class="loader" />正在載入管理資料…</div>
     <div v-else-if="error" class="state-panel error-state" role="alert"><strong>管理資料讀取失敗</strong><p>{{ errorMessage(error) }}</p><button class="secondary-button" @click="refresh()">再試一次</button></div>
     <template v-else-if="data">
