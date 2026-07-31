@@ -3,11 +3,23 @@ import type { Checkin, CheckinComment } from '~/composables/useCheckins'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
+// useAuth() 內部呼叫 useFetch，必須在頂層 await 之前取得，否則會離開 Nuxt 的 setup context。
+const { user } = useAuth()
 const { data, status, error, refresh } = await useFetch<{ checkin: Checkin, comments: CheckinComment[] }>(() => `/api/checkins/${id.value}`)
 const comment = reactive({ nickname: '', message: '' })
 const sending = ref(false)
 const commentError = ref('')
 const createdNotice = ref(route.query.created === '1')
+const deleting = ref(false)
+const deleteError = ref('')
+
+// 與伺服器端 assertCheckinDeletable 同一條規則：管理員，或 user_id 確實等於自己的擁有者。
+// 種子資料的 userId 是 null，這裡不能讓 null 和任何值比較成功。
+const canDelete = computed(() => {
+  const checkin = data.value?.checkin
+  if (!checkin || !user.value) return false
+  return user.value.role === 'admin' || (typeof checkin.userId === 'number' && checkin.userId === user.value.id)
+})
 
 async function addComment() {
   if (sending.value) return
@@ -24,6 +36,21 @@ async function addComment() {
     commentError.value = errorMessage(error, '留言送出失敗，請稍後再試。')
   } finally {
     sending.value = false
+  }
+}
+
+async function removeCheckin() {
+  if (deleting.value || !data.value) return
+  if (!window.confirm(`確定要刪除「${data.value.checkin.location}」這則旅箋嗎？此操作無法復原。`)) return
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await $fetch(`/api/checkins/${id.value}`, { method: 'DELETE' })
+    await navigateTo('/')
+  } catch (error) {
+    deleteError.value = errorMessage(error, '刪除失敗，請稍後再試。')
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -50,6 +77,11 @@ useHead(() => ({ title: data.value ? `${data.value.checkin.location}｜未完旅
           <div class="detail-author"><DollAvatar :src="data.checkin.avatar" :preset="data.checkin.avatarPreset" :alt="`${data.checkin.nickname}的頭像`" size="medium" /><div><strong>{{ data.checkin.nickname }} 與 {{ data.checkin.dollName }}</strong><time :datetime="data.checkin.visitedAt">{{ formatDate(data.checkin.visitedAt) }}</time></div></div>
           <blockquote>「{{ data.checkin.message }}」</blockquote>
           <dl class="detail-facts"><div><dt>旅行地點</dt><dd>{{ data.checkin.county }}・{{ data.checkin.location }}</dd></div><div><dt>地圖座標</dt><dd>{{ data.checkin.latitude.toFixed(5) }}, {{ data.checkin.longitude.toFixed(5) }}</dd></div></dl>
+          <div v-if="canDelete" class="form-submit">
+            <div v-if="deleteError" class="inline-error" role="alert">{{ deleteError }}</div>
+            <p v-else>刪除後，這頁的照片與地點座標會一併從網站上移除，且無法復原。</p>
+            <button class="danger-button" type="button" :disabled="deleting" @click="removeCheckin">{{ deleting ? '刪除中…' : '刪除這則旅箋' }}</button>
+          </div>
         </div>
       </article>
 
