@@ -60,7 +60,11 @@ export function formatCommentDate(value: string) {
 export function errorMessage(error: unknown, fallback = '發生未預期的錯誤，請稍後再試。') {
   if (error && typeof error === 'object') {
     const value = error as { data?: { statusMessage?: string, message?: string }, statusMessage?: string, message?: string }
-    return value.data?.statusMessage || value.data?.message || value.statusMessage || value.message || fallback
+    // message 要排在 statusMessage 前面：Nitro 序列化錯誤時 statusMessage 固定是預設的
+    // "Server Error"（nitropack/.../error/prod.mjs），真正的訊息在 message，而本專案所有
+    // createError 都只給 message。順序反過來的話，畫面上永遠只會顯示 "Server Error"。
+    // 這個順序不會外洩內部細節：Nitro 對 5xx／未處理錯誤本來就會把 message 換成通用字串。
+    return value.data?.message || value.data?.statusMessage || value.statusMessage || value.message || fallback
   }
   return fallback
 }
