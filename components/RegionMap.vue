@@ -91,13 +91,27 @@ function applyRegion() {
   map.value.setView(props.region.center, props.region.zoom)
 }
 
-onMounted(async () => {
-  if (!mapElement.value) return
+/**
+ * 初始化綁在 template ref 的 watcher 而不是 onMounted。
+ *
+ * 這個元件同時被 .client 檔名後綴與外層的 <ClientOnly> 包了兩層 client-only
+ * （檔名已改回 RegionMap.vue，只留 <ClientOnly> 這一種機制）。兩層疊在一起時，
+ * onMounted 有機會在 mapElement 還沒指到實際 DOM 節點時就跑完，而原本的寫法是
+ * `if (!mapElement.value) return` —— 一旦提早 return 就再也不會重試，地圖從此
+ * 是死的。實測就是這個症狀：首次載入完全沒有 leaflet 請求，但 SPA 導覽離開再
+ * 回來就正常，因為那時 ref 已經就緒。
+ *
+ * 改成 watcher（flush: 'post' 確保 DOM 已更新、immediate 處理 ref 早就備妥的
+ * 情況）之後，不管是哪種掛載時序都會在元素真的出現時初始化。
+ */
+async function initMap(element: HTMLElement) {
+  if (map.value) return
   leaflet = await import('leaflet')
   await import('leaflet/dist/leaflet.css')
-  if (!mapElement.value) return
+  // 等待動態 import 的期間元件可能已被卸載，或元素已被換掉
+  if (map.value || mapElement.value !== element) return
 
-  map.value = leaflet.map(mapElement.value, {
+  map.value = leaflet.map(element, {
     center: props.region.center,
     zoom: props.region.zoom,
     minZoom: props.region.minZoom ?? 2,
@@ -116,8 +130,12 @@ onMounted(async () => {
   syncMarkers()
   requestAnimationFrame(() => map.value?.invalidateSize())
   resizeObserver = new ResizeObserver(() => map.value?.invalidateSize({ pan: false }))
-  resizeObserver.observe(mapElement.value)
-})
+  resizeObserver.observe(element)
+}
+
+watch(mapElement, (element) => {
+  if (element) initMap(element)
+}, { immediate: true, flush: 'post' })
 
 watch(() => props.checkins, syncMarkers, { deep: true })
 watch(() => props.selectedId, () => {

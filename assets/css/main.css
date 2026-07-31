@@ -413,7 +413,12 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 .map-empty-overlay span { color: var(--muted); font-size: .8rem; }
 .osm-marker-shell { border: 0 !important; background: transparent !important; }
 .osm-marker-avatar { display: grid; width: 45px; height: 45px; overflow: hidden; place-items: center; color: white; border: 3px solid white; border-radius: 50%; background: var(--rose); box-shadow: 0 7px 18px rgb(56 47 52 / 34%); transition: transform .18s ease, box-shadow .18s ease; }
-.osm-marker-avatar img { width: 100%; height: 100%; object-fit: cover; }
+/* 選擇器必須包含 .leaflet-container .leaflet-marker-pane 才蓋得過 leaflet.css 的
+   `.leaflet-container .leaflet-marker-pane img { width: auto }`（優先權 0,2,1）。
+   只寫 `.osm-marker-avatar img`（0,1,1）會輸，圖片就以原始尺寸（例如 320px）
+   塞進 45px 的圓框裡被 overflow 裁掉，只看得到正中央那幾十像素 —— 畫面上就是一
+   塊沒有細節的色塊。 */
+.leaflet-container .leaflet-marker-pane .osm-marker-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .osm-marker-avatar span { font: 700 1rem 'Zen Maru Gothic', sans-serif; }
 .osm-marker-avatar.is-selected { border-color: #ffe39a; transform: scale(1.15); box-shadow: 0 0 0 4px rgb(255 227 154 / 48%), 0 8px 20px rgb(56 47 52 / 36%); }
 .osm-marker-shell i { display: block; width: 2px; height: 10px; margin: -1px auto 0; background: var(--rose-dark); }
