@@ -63,7 +63,6 @@ components/                通用 RegionMap、卡片、頭像裁切等元件
 composables/               useAuth、useCheckins 等前端共用邏輯
 utils/                     前後端共用工具（安全回跳路徑）
 assets/css/main.css        全站視覺與響應式樣式
-public/                    靜態資產
 server/api/                Nitro JSON / multipart API
 server/routes/uploads/     上傳圖片讀取路由
 server/utils/              SQLite、驗證、上傳、請求安全與 Discord 工具
