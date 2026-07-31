@@ -30,7 +30,8 @@ export default defineNuxtConfig({
     }
   },
   nitro: {
-    externals: { external: ['better-sqlite3'] }
+    // better-sqlite3 與 sharp 都是原生模組（.node binding），被 bundle 進去會找不到二進位檔
+    externals: { external: ['better-sqlite3', 'sharp'] }
   },
   typescript: { strict: true }
 })
