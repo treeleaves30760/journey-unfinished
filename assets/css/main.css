@@ -520,6 +520,47 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 .cta-copy .eyebrow { color: #f8d6dc; }
 .cta-copy h2 { font-size: clamp(1.85rem, 4vw, 2.8rem); }
 .cta-copy p { max-width: 570px; margin: 14px auto 25px; color: rgb(255 255 255 / 74%); }
+/* 投稿三步驟：把「寫一則旅箋要做什麼」攤開在最後一頁，讓這一段不只有一顆按鈕。
+   卡片只用一層很淡的白底和外框，維持整張 CTA 以文字為主的安靜感。 */
+.cta-steps {
+  display: grid;
+  margin: 0 0 26px;
+  padding: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  list-style: none;
+  text-align: left;
+}
+.cta-steps li {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 16px 16px 17px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 7%);
+}
+.cta-steps b { color: var(--gold-soft); font: 800 .68rem 'Zen Maru Gothic', sans-serif; letter-spacing: .16em; }
+.cta-steps strong { font: 700 1.02rem 'Zen Maru Gothic', sans-serif; }
+.cta-steps span { color: rgb(255 255 255 / 70%); font-size: .78rem; line-height: 1.7; }
+.cta-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; }
+.cta-ghost-button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  color: rgb(255 255 255 / 88%);
+  border: 1px solid rgb(255 255 255 / 30%);
+  border-radius: 999px;
+  cursor: pointer;
+  background: transparent;
+  font-weight: 800;
+  line-height: 1.25;
+  transition: border-color .18s ease, background-color .18s ease;
+}
+.cta-copy .cta-footnote { max-width: none; margin: 20px auto 0; color: rgb(255 255 255 / 62%); font-size: .76rem; }
+.cta-footnote strong { color: white; font-size: .9rem; }
 .cta-doodle { position: relative; z-index: 2; color: var(--gold-soft); font-size: clamp(2.2rem, 5vw, 4rem); opacity: .8; }
 .cta-doodle.left { transform: rotate(-14deg); }
 .cta-doodle.right { transform: rotate(13deg); }
@@ -716,6 +757,7 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
   .primary-button:hover { transform: translateY(-2px); background: #97354f; box-shadow: 0 14px 28px rgb(173 64 92 / 25%); }
   .primary-button.light:hover { color: var(--rose-dark); background: white; }
   .secondary-button:hover { transform: translateY(-1px); background: white; }
+  .cta-ghost-button:hover { border-color: rgb(255 255 255 / 60%); background: rgb(255 255 255 / 12%); }
   .checkin-card:hover { border-color: #dfc9c7; transform: translateY(-6px); box-shadow: var(--shadow-lift); }
   .checkin-card:hover .card-photo > img { transform: scale(1.035); }
 }
@@ -782,6 +824,14 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
   .card-grid { grid-template-columns: 1fr; }
   .card-photo { aspect-ratio: 16 / 10; }
   .cta-section { width: min(100% - 28px, var(--content)); min-height: 330px; grid-template-columns: 1fr; margin-bottom: 72px; padding: 45px 24px; border-radius: 29px; }
+  /* 手機版把三步驟收成單欄的短句：整頁一屏的版面在這個高度已經很滿，
+     保留步驟本身（這一段的重點），把補充說明讓給版面。 */
+  .cta-steps { grid-template-columns: 1fr; gap: 7px; margin-bottom: 21px; }
+  .cta-steps li { grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 11px; padding: 11px 15px; }
+  .cta-steps span { display: none; }
+  .cta-actions .primary-button, .cta-ghost-button { width: 100%; justify-content: center; }
+  /* 右下角的 ✦ 在手機版是絕對定位的裝飾，統計那一行要讓開它才不會疊字 */
+  .cta-copy .cta-footnote { padding-inline: 34px; }
   .cta-doodle { position: absolute; }
   .cta-doodle.left { top: 24px; left: 28px; }
   .cta-doodle.right { right: 27px; bottom: 22px; }
@@ -897,7 +947,8 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 .home-page .map-section .section-heading { margin-bottom: clamp(10px, 1.6dvh, 20px); }
 .home-page .map-section .section-heading p { margin-top: 6px; }
 .home-page .explore-toolbar { min-height: 62px; margin-bottom: clamp(10px, 1.5dvh, 18px); padding-block: 9px; }
-.home-page .map-layout { height: clamp(330px, 50dvh, 510px); }
+/* 篩選列收成一行、全螢幕入口改浮在地圖右上角之後，這一頁多出來的縱向空間全部給地圖。 */
+.home-page .map-layout { height: clamp(360px, 60dvh, 620px); }
 .home-page .map-panel { display: flex; min-height: 0; flex-direction: column; }
 .home-page .region-map-shell { min-height: 0; height: auto; flex: 1; }
 .home-page .map-loading { height: 100%; min-height: 280px; }
@@ -924,11 +975,28 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 .home-panel-footer { display: flex; width: min(var(--content), calc(100% - 36px)); align-items: center; justify-content: center; flex-wrap: wrap; gap: 5px 14px; margin-inline: auto; color: var(--muted); font-size: .72rem; text-align: center; }
 .home-panel-footer strong { color: var(--ink); font: 700 .8rem 'Zen Maru Gothic', sans-serif; }
 .home-panel-footer small { color: #978b91; }
-.page-dots { position: fixed; top: 50%; right: max(12px, calc((100vw - var(--content)) / 2 - 48px)); z-index: 750; display: grid; gap: 5px; transform: translateY(-50%); }
-.page-dots button { display: flex; min-width: 43px; min-height: 32px; align-items: center; justify-content: flex-end; gap: 8px; padding: 3px; color: var(--muted); border: 0; cursor: pointer; background: transparent; font: 700 .62rem 'Zen Maru Gothic', sans-serif; }
+/* 貼著視窗右緣：扣掉的數字比留白（(100vw - content)/2）大時就會落到下限，寬螢幕則跟著往右靠。 */
+.page-dots { position: fixed; top: 50%; right: max(6px, calc((100vw - var(--content)) / 2 - 112px)); z-index: 750; display: grid; gap: 5px; transform: translateY(-50%); }
+.page-dots button { display: flex; min-width: 43px; min-height: 32px; align-items: center; justify-content: flex-end; gap: 7px; padding: 3px 2px 3px 3px; color: var(--muted); border: 0; cursor: pointer; background: transparent; font: 700 .62rem 'Zen Maru Gothic', sans-serif; }
+/* 編號旁的兩字說明：淡一階，讓 01–04 仍是主要的節奏感，滑到目前這一段才轉成玫瑰色 */
+.page-dots em { color: #b3a4a8; font-size: .72rem; font-style: normal; letter-spacing: .02em; white-space: nowrap; transition: color .25s ease; }
 .page-dots i { display: block; width: 16px; height: 2px; border-radius: 999px; background: #cdbfc0; transition: width .25s ease, background-color .25s ease; }
 .page-dots button.active { color: var(--rose-dark); }
+.page-dots button.active em { color: var(--rose-dark); }
 .page-dots button.active i { width: 31px; background: var(--rose-dark); }
+/* 視窗左右沒有留白可站時（大約 1380px 以下），這條導覽會浮在內容上面——最明顯的是第 04 頁
+   那張深綠色卡片，灰字疊上去幾乎看不見。這時給它一層淡色底，讓它讀起來是浮在頁面上的控制項。
+   721px 以下有另一組把它改成底部膠囊的規則，不需要這層。 */
+@media (min-width: 721px) and (max-width: 1380px) {
+  .page-dots {
+    padding: 7px 10px 7px 9px;
+    border: 1px solid rgb(231 221 211 / 70%);
+    border-radius: 18px;
+    background: rgb(251 247 240 / 90%);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(10px);
+  }
+}
 .home-page.is-enhanced .panel-enter { opacity: 0; transition: opacity .65s ease, transform .75s cubic-bezier(.2, .8, .2, 1); }
 .home-page.is-enhanced .from-left { transform: translateX(-90px); }
 .home-page.is-enhanced .from-right { transform: translateX(90px); }
@@ -1054,7 +1122,7 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
   .home-panel-footer { display: none; }
   .page-dots { top: auto; right: auto; bottom: 10px; left: 50%; display: flex; padding: 4px 8px; border: 1px solid rgb(231 221 211 / 72%); border-radius: 999px; background: rgb(251 247 240 / 84%); box-shadow: var(--shadow-soft); transform: translateX(-50%); backdrop-filter: blur(12px); }
   .page-dots button { min-width: 26px; min-height: 27px; justify-content: center; }
-  .page-dots button span { display: none; }
+  .page-dots button span, .page-dots button em { display: none; }
   .page-dots i { width: 8px; height: 8px; border-radius: 50%; }
   .page-dots button.active i { width: 22px; border-radius: 999px; }
   .auth-page { min-height: calc(100dvh - 64px); padding: 28px 14px 60px; }
@@ -1091,6 +1159,23 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
    固定寬度並清掉隱含的內容最小寬度，才能保證不管選到什麼都不會撐破版面造成水平溢出。 */
 .home-page .filters select { width: 100%; min-width: 0; }
 .home-page .search-field { flex: 1 1 220px; grid-column: 1 / -1; }
+
+/* 桌機寬度把五個控制項壓在同一行：原本每欄有 140px 的最低寬度，加起來超過工具列可用寬度就會
+   折行（旅行日期被擠到第二列）。改成可壓縮的彈性欄寬——關鍵字給比較大的 grow 讓它吃掉剩餘空間，
+   select 已經有 width: 100%; min-width: 0 保底，選到很長的作品名稱也不會撐破版面。
+   901px 以下維持原本的折行／堆疊版面，手機上把五個控制項擠成一列反而不能用。 */
+@media (min-width: 901px) {
+  .home-page .explore-toolbar { gap: 16px; }
+  .home-page .toolbar-summary strong { white-space: nowrap; }
+  /* .filters 自己也要能長大，不然這一列會縮到內容寬度、把工具列右半邊空在那裡 */
+  .home-page .filters { min-width: 0; flex: 1 1 auto; flex-wrap: nowrap; gap: 9px; }
+  .home-page .filters label { min-width: 0; flex: 1 1 112px; }
+  .home-page .filters label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 關鍵字是唯一要讓人讀得到自己輸入內容的欄位，給它比 select 更大的成長比例。
+     選擇器要帶上 .filters label 才蓋得過上面那條同名屬性（單寫 .search-field 特異度較低）。 */
+  .home-page .filters label.search-field { flex: 2.4 1 168px; }
+  .home-page .clear-filter { flex: 0 0 auto; padding-inline: 4px; white-space: nowrap; }
+}
 .home-page .search-field input {
   width: 100%;
   min-width: 0;
