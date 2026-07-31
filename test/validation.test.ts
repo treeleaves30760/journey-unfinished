@@ -53,12 +53,14 @@ describe('validateCheckin 內容衛生', () => {
     expect(() => validateCheckin({ ...okCheckin, nickname: `旅人${chars(0x0000)}小花` })).toThrow(badRequest)
     expect(() => validateCheckin({ ...okCheckin, location: `大安${chars(0x000D)}公園` })).toThrow(badRequest)
     expect(() => validateCheckin({ ...okCheckin, dollName: `小${chars(0x0009)}櫻` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...okCheckin, series: `第一${chars(0x0000)}集` })).toThrow(badRequest)
   })
 
   it('rejects zero-width and bidi override characters', () => {
     expect(() => validateCheckin({ ...okCheckin, nickname: `旅人${chars(0x200B)}小花` })).toThrow(badRequest)
     expect(() => validateCheckin({ ...okCheckin, location: `${chars(0x202E)}大安森林公園` })).toThrow(badRequest)
     expect(() => validateCheckin({ ...okCheckin, dollName: `小${chars(0xFEFF)}櫻` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...okCheckin, series: `${chars(0x200B)}第一集` })).toThrow(badRequest)
   })
 
   it('keeps line breaks in the message but not carriage returns', () => {
@@ -71,10 +73,11 @@ describe('validateCheckin 內容衛生', () => {
     expect(validateCheckin({ ...okCheckin, dollName: zwjFamily }).dollName).toBe(zwjFamily)
   })
 
-  it('rejects any link in nickname, location and doll name', () => {
+  it('rejects any link in nickname, location, doll name and series', () => {
     expect(() => validateCheckin({ ...okCheckin, nickname: '追蹤我 www.spam.example' })).toThrow(badRequest)
     expect(() => validateCheckin({ ...okCheckin, location: 'https://spam.example/a' })).toThrow(badRequest)
     expect(() => validateCheckin({ ...okCheckin, dollName: 'buy.shop' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...okCheckin, series: '追蹤我 www.spam.example' })).toThrow(badRequest)
   })
 
   it('allows up to two links in the message and rejects the third', () => {
@@ -92,6 +95,32 @@ describe('validateCheckin 內容衛生', () => {
     const decomposed = `e${chars(COMBINING_ACUTE)}`.repeat(250)
     expect(validateCheckin({ ...okCheckin, message: decomposed }).message).toHaveLength(250)
     expect(() => validateCheckin({ ...okCheckin, message: `e${chars(COMBINING_ACUTE)}`.repeat(501) }))
+      .toThrow(badRequest)
+  })
+})
+
+// series（作品出處）是唯一的選填自由文字欄位：原創娃娃沒有作品可以填，這裡單獨測
+// 「留空／只有空白要正規化成 null」這個其他必填欄位都不需要的行為。內容本身的衛生檢查
+// （控制字元、隱藏字元、連結）已經併進上面 `validateCheckin 內容衛生` 的既有案例。
+describe('validateCheckin series 欄位（選填）', () => {
+  const okCheckin = { ...validCheckin, avatarPreset: 'peach' }
+
+  it('normalizes a missing, empty or whitespace-only series to null', () => {
+    expect(validateCheckin(okCheckin).series).toBeNull()
+    expect(validateCheckin({ ...okCheckin, series: '' }).series).toBeNull()
+    expect(validateCheckin({ ...okCheckin, series: '   ' }).series).toBeNull()
+  })
+
+  it('trims a provided series and keeps it', () => {
+    expect(validateCheckin({ ...okCheckin, series: '  夏日重現  ' }).series).toBe('夏日重現')
+  })
+
+  it('rejects a series longer than 60 characters, measured after composing to NFC', () => {
+    // 60 個 'e' + U+0301 在 JS 裡是 120 個 UTF-16 單位，正規化後只剩 60 個字元，剛好卡在上限；
+    // 不正規化的話會被誤判成超過上限兩倍，永遠通不過。
+    const decomposed = `e${chars(COMBINING_ACUTE)}`.repeat(60)
+    expect(validateCheckin({ ...okCheckin, series: decomposed }).series).toHaveLength(60)
+    expect(() => validateCheckin({ ...okCheckin, series: `e${chars(COMBINING_ACUTE)}`.repeat(61) }))
       .toThrow(badRequest)
   })
 })

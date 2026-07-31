@@ -16,6 +16,9 @@ export interface CheckinInput {
   latitude: number
   longitude: number
   dollName: string
+  // 選填：原創娃娃沒有作品出處。標成可選屬性（而非一律要求、值可為 null）是為了讓舊測試
+  // 與呼叫端在還沒補上這個欄位時，物件字面量依然合法——真正一定會回填的邏輯在 validateCheckin。
+  series?: string | null
   message: string
   visitedAt: string
   avatarPreset: string
@@ -59,7 +62,8 @@ export function validateCheckin(fields: Record<string, unknown>): CheckinInput {
   }
 
   // county 與 avatarPreset 是列舉、visitedAt 是嚴格日期格式，都不需要再過衛生檢查；
-  // 其餘四個自由文字欄位會公開渲染在旅箋頁上，套用與留言相同的規則。
+  // 其餘五個自由文字欄位會公開渲染在旅箋頁上，套用與留言相同的規則。series 額外允許留空
+  // （原創娃娃沒有作品出處），交給 optionalSafeText 把空白／未填寫正規化成 null。
   return {
     nickname: safeText(fields.nickname, '暱稱', 1, 30, { multiline: false, maxLinks: 0 }),
     location: safeText(fields.location, '地點', 2, 80, { multiline: false, maxLinks: 0 }),
@@ -67,6 +71,7 @@ export function validateCheckin(fields: Record<string, unknown>): CheckinInput {
     latitude: numberInRange(fields.latitude, '緯度', 20, 27),
     longitude: numberInRange(fields.longitude, '經度', 118, 123),
     dollName: safeText(fields.dollName, '娃娃名稱', 1, 40, { multiline: false, maxLinks: 0 }),
+    series: optionalSafeText(fields.series, '作品', 60, { multiline: false, maxLinks: 0 }),
     message: safeText(fields.message, '旅途留言', 1, 500, { multiline: true, maxLinks: MAX_FREE_TEXT_LINKS }),
     visitedAt,
     avatarPreset
@@ -113,6 +118,16 @@ function safeText(value: unknown, label: string, min: number, max: number, rule:
   }
 
   return clean
+}
+
+/**
+ * 給選填的自由文字欄位用（目前只有 series）：留空、只有空白都要正規化成 null，
+ * 而不是把空字串存進資料庫——下游「有值才顯示」與篩選邏輯才不必再各自判斷空字串。
+ * 一旦有內容，就交給 safeText 走完整套衛生檢查，不能因為欄位選填就少檢查。
+ */
+function optionalSafeText(value: unknown, label: string, max: number, rule: TextRule) {
+  const trimmed = String(value ?? '').normalize('NFC').trim()
+  return trimmed ? safeText(trimmed, label, 1, max, rule) : null
 }
 
 export function validateComment(body: Record<string, unknown>) {

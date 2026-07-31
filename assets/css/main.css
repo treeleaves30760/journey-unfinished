@@ -1083,3 +1083,27 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
   .admin-checkins article { grid-template-columns: auto minmax(0, 1fr); }
   .admin-checkins .danger-button { grid-column: 1 / -1; width: 100%; }
 }
+
+/* 首頁探索篩選：在縣市之外加了作品、娃娃名稱與關鍵字搜尋，控制項變多了。用 .home-page 限定
+   套用範圍，其他頁面若也沿用 .explore-toolbar／.filters 這組樣式（例如整頁地圖）不會被影響到。 */
+.home-page .filters { flex-wrap: wrap; }
+/* 下拉選單被選到很長的作品名稱時，原生 <select> 有可能想撐開到超過欄位寬度；
+   固定寬度並清掉隱含的內容最小寬度，才能保證不管選到什麼都不會撐破版面造成水平溢出。 */
+.home-page .filters select { width: 100%; min-width: 0; }
+.home-page .search-field { flex: 1 1 220px; grid-column: 1 / -1; }
+.home-page .search-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 7px 12px;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  outline: none;
+  background-color: var(--paper-strong);
+}
+.home-page .search-field input:focus { border-color: var(--rose); box-shadow: 0 0 0 4px rgb(217 103 126 / 10%); }
+
+/* 旅箋卡片上的作品出處：只在 checkin.series 有值時才會出現在 DOM 上（v-if），這裡只負責
+   它出現時的外觀。卡片寬度固定，單行截斷可避免長作品名稱把心得往下推或撐開卡片。 */
+.card-series { display: block; overflow: hidden; margin: 0 0 8px; color: var(--rose-dark); font-size: .74rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }

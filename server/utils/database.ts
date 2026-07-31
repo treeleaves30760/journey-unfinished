@@ -42,7 +42,7 @@ const userColumns = `id, discord_id AS discordId, username, display_name AS disp
 
 const baseSelect = `
   SELECT c.id, c.user_id AS userId, c.nickname, c.location, c.county,
-    c.latitude, c.longitude, c.doll_name AS dollName,
+    c.latitude, c.longitude, c.doll_name AS dollName, c.series,
     c.message, c.visited_at AS visitedAt,
     c.photo, c.avatar, c.avatar_preset AS avatarPreset,
     c.created_at AS createdAt,
@@ -124,6 +124,7 @@ export function getDatabase(): SQLiteDatabase {
       latitude REAL NOT NULL,
       longitude REAL NOT NULL,
       doll_name TEXT NOT NULL CHECK(length(doll_name) BETWEEN 1 AND 40),
+      series TEXT CHECK(series IS NULL OR length(series) BETWEEN 1 AND 60),
       message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 500),
       visited_at TEXT NOT NULL,
       photo TEXT,
@@ -151,6 +152,11 @@ export function getDatabase(): SQLiteDatabase {
   if (!checkinColumns.some(column => column.name === 'user_id')) {
     database.exec('ALTER TABLE checkins ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL')
   }
+  // 舊資料庫沒有這欄，一律補 NULL（等同「原創娃娃／未填寫作品」），不影響既有旅箋的顯示。
+  // CHECK 約束照抄 CREATE TABLE 那份，讓補齊欄位後的舊資料庫和全新建立的資料庫 schema 一致。
+  if (!checkinColumns.some(column => column.name === 'series')) {
+    database.exec('ALTER TABLE checkins ADD COLUMN series TEXT CHECK(series IS NULL OR length(series) BETWEEN 1 AND 60)')
+  }
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_id);
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
@@ -170,10 +176,10 @@ export function findCheckin(id: number): Checkin | undefined {
 export function createCheckin(input: CheckinInput, photo: string | null, avatar: string | null, userId: number): Checkin {
   const result = getDatabase().prepare(`
     INSERT INTO checkins
-      (user_id, nickname, location, county, latitude, longitude, doll_name, message, visited_at, photo, avatar, avatar_preset)
+      (user_id, nickname, location, county, latitude, longitude, doll_name, series, message, visited_at, photo, avatar, avatar_preset)
     VALUES
-      (@userId, @nickname, @location, @county, @latitude, @longitude, @dollName, @message, @visitedAt, @photo, @avatar, @avatarPreset)`)
-    .run({ ...input, photo, avatar, userId })
+      (@userId, @nickname, @location, @county, @latitude, @longitude, @dollName, @series, @message, @visitedAt, @photo, @avatar, @avatarPreset)`)
+    .run({ series: null, ...input, photo, avatar, userId })
   return findCheckin(Number(result.lastInsertRowid))!
 }
 

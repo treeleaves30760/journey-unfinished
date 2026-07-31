@@ -4,6 +4,9 @@ import type { Checkin } from '~/composables/useCheckins'
 const { data, status, error, refresh } = await useFetch<{ checkins: Checkin[] }>('/api/checkins')
 const selected = ref<Checkin | null>(null)
 const county = ref('全部地區')
+const seriesFilter = ref('全部作品')
+const dollNameFilter = ref('全部娃娃')
+const keyword = ref('')
 const sort = ref<'new' | 'old'>('new')
 const homePage = ref<HTMLElement | null>(null)
 const heroPanel = ref<HTMLElement | null>(null)
@@ -16,17 +19,47 @@ const { user } = useAuth()
 let panelObserver: IntersectionObserver | null = null
 
 const checkins = computed(() => data.value?.checkins || [])
+
+// 關鍵字要同時比對地點、娃娃名稱、暱稱、作品與心得，任一欄位命中即算符合；
+// series 可能是 null（原創娃娃沒有作品出處），跳過空值才不會讓 normalizeSearchText 收到 null。
+function matchesKeyword(item: Checkin, needle: string) {
+  if (!needle) return true
+  return [item.location, item.dollName, item.nickname, item.series, item.message]
+    .some(value => value && normalizeSearchText(value).includes(needle))
+}
+
 const filtered = computed(() => {
-  const list = county.value === '全部地區' ? [...checkins.value] : checkins.value.filter(item => item.county === county.value)
+  const needle = normalizeSearchText(keyword.value)
+  const list = checkins.value.filter(item =>
+    (county.value === '全部地區' || item.county === county.value)
+    && (seriesFilter.value === '全部作品' || item.series === seriesFilter.value)
+    && (dollNameFilter.value === '全部娃娃' || item.dollName === dollNameFilter.value)
+    && matchesKeyword(item, needle)
+  )
   return list.sort((a, b) => sort.value === 'new' ? b.visitedAt.localeCompare(a.visitedAt) : a.visitedAt.localeCompare(b.visitedAt))
 })
+
 const availableCounties = computed(() => [...new Set(checkins.value.map(item => item.county))])
+// 只從「有填作品」的旅箋取值：series 是 null 的原創娃娃不該在下拉選單裡變成一個叫 null 的選項。
+const availableSeries = computed(() => [...new Set(checkins.value.map(item => item.series).filter((value): value is string => Boolean(value)))])
+const availableDollNames = computed(() => [...new Set(checkins.value.map(item => item.dollName))])
+const hasActiveFilters = computed(() =>
+  county.value !== '全部地區' || seriesFilter.value !== '全部作品'
+  || dollNameFilter.value !== '全部娃娃' || keyword.value !== ''
+)
 const totalComments = computed(() => checkins.value.reduce((sum, item) => sum + item.commentCount, 0))
 const createTarget = computed(() => user.value ? '/checkins/new' : '/login?redirect=/checkins/new')
 const panelLabels = ['旅箋首頁', '探索地圖', '沿途新頁', '寫下旅箋']
 
 function selectCheckin(checkin: Checkin) {
   selected.value = checkin
+}
+
+function clearFilters() {
+  county.value = '全部地區'
+  seriesFilter.value = '全部作品'
+  dollNameFilter.value = '全部娃娃'
+  keyword.value = ''
 }
 
 function scrollToPanel(index: number) {
@@ -90,8 +123,11 @@ onBeforeUnmount(() => panelObserver?.disconnect())
           <div class="toolbar-summary"><span>目前顯示</span><strong>{{ filtered.length }} 則沿途旅箋</strong></div>
           <div class="filters">
             <label><span>地區</span><select v-model="county"><option>全部地區</option><option v-for="item in availableCounties" :key="item">{{ item }}</option></select></label>
+            <label><span>作品</span><select v-model="seriesFilter"><option>全部作品</option><option v-for="item in availableSeries" :key="item">{{ item }}</option></select></label>
+            <label><span>娃娃名稱</span><select v-model="dollNameFilter"><option>全部娃娃</option><option v-for="item in availableDollNames" :key="item">{{ item }}</option></select></label>
+            <label class="search-field"><span>關鍵字</span><input v-model.trim="keyword" type="search" maxlength="100" placeholder="地點、娃娃、暱稱、作品或心得"></label>
             <label><span>旅行日期</span><select v-model="sort"><option value="new">新到舊</option><option value="old">舊到新</option></select></label>
-            <button v-if="county !== '全部地區'" type="button" class="clear-filter" @click="county = '全部地區'">清除篩選</button>
+            <button v-if="hasActiveFilters" type="button" class="clear-filter" @click="clearFilters">清除篩選</button>
           </div>
         </div>
 
@@ -129,7 +165,7 @@ onBeforeUnmount(() => panelObserver?.disconnect())
                   <DollAvatar :src="item.avatar" :preset="item.avatarPreset" alt="" size="small" />
                   <span><strong>{{ item.location }}</strong><small>{{ item.nickname }} 與 {{ item.dollName }}</small></span><i aria-hidden="true">›</i>
                 </button>
-                <p v-if="!filtered.length" class="map-side-empty">這個地區還沒有旅箋，換個地區看看吧。</p>
+                <p v-if="!filtered.length" class="map-side-empty">沒有符合篩選條件的旅箋，換個條件看看吧。</p>
               </div>
             </Transition>
           </aside>
@@ -141,10 +177,10 @@ onBeforeUnmount(() => panelObserver?.disconnect())
       <div class="stories-section">
       <div class="section-heading row-heading panel-enter from-left">
         <div><span class="eyebrow">PAGES ALONG THE WAY</span><h2>沿途寫下的新頁</h2></div>
-        <p class="result-count">{{ county === '全部地區' ? '全部地區' : county }} · {{ filtered.length }} 則旅箋</p>
+        <p class="result-count">{{ hasActiveFilters ? '符合篩選' : '全部地區' }} · {{ filtered.length }} 則旅箋</p>
       </div>
       <div v-if="filtered.length" class="card-grid panel-enter from-bottom"><CheckinCard v-for="item in filtered" :key="item.id" :checkin="item" /></div>
-      <div v-else class="state-panel empty-state"><strong>這個地區還沒有旅箋</strong><p>換個地區看看，或寫下你們共同抵達的第一站。</p></div>
+      <div v-else class="state-panel empty-state"><strong>沒有符合篩選條件的旅箋</strong><p>試著調整篩選條件，或寫下你們共同抵達的第一站。</p></div>
       </div>
     </section>
 
@@ -162,3 +198,4 @@ onBeforeUnmount(() => panelObserver?.disconnect())
     </nav>
   </main>
 </template>
+
