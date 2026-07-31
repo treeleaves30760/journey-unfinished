@@ -1,0 +1,17 @@
+node_modules
+.nuxt
+.output
+.cache
+coverage
+.git
+.github
+.env
+.env.*
+!.env.example
+data/*.sqlite
+data/*.sqlite-*
+data/uploads/*
+!data/uploads/.gitkeep
+npm-debug.log*
+.DS_Store
+README.md
