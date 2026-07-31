@@ -1,0 +1,211 @@
+# 未完旅箋 — k3s 應用資源
+#
+# 這個檔案含 ${APP_HOST} / ${IMAGE_TAG} / ${APP_NODEPORT} / ${DATA_SIZE} 佔位符，
+# 請用 scripts/deploy.sh 套用（內部以 envsubst 展開），不要直接 kubectl apply。
+#
+# 叢集沒有 ingress controller：/etc/rancher/k3s/config.yaml 已停用 traefik 與
+# servicelb，因為 host 上的 nginx 要獨佔 80/443（servicelb 會用 hostPort 綁
+# 80/443 並在 PREROUTING 做 DNAT，在封包抵達 nginx 前就攔走）。
+# 因此這裡沒有 Ingress 物件，改用 NodePort Service + nginx proxy_pass。
+#
+# 機密（Discord client id/secret、管理員 ID）不在這裡，由 scripts/deploy.sh
+# 以 kubectl create secret 從 .env 建立，避免落入 git。
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: journey-unfinished
+  labels:
+    app.kubernetes.io/name: journey-unfinished
+    # 讓 kubelet 對這個 namespace 套用 restricted Pod Security Standard
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+# SQLite 與上傳圖片。local-path 是 k3s 內建預設 StorageClass，
+# 實際落在 NAS 的 /var/lib/rancher/k3s/storage/<pvc>/。
+# ReadWriteOnce + 單一 replica：SQLite 不能被兩個 pod 同時寫。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: journey-data
+  namespace: journey-unfinished
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: ${DATA_SIZE}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: journey-config
+  namespace: journey-unfinished
+data:
+  NODE_ENV: "production"
+  HOST: "0.0.0.0"
+  PORT: "3000"
+  NUXT_TELEMETRY_DISABLED: "1"
+  NUXT_DATABASE_PATH: "/app/data/journey-unfinished.sqlite"
+  NUXT_UPLOAD_DIR: "/app/data/uploads"
+  NUXT_MAX_UPLOAD_BYTES: "5242880"
+  NUXT_SESSION_DAYS: "30"
+  # 公開 Origin。必須是 https：程式用它決定 session cookie 的 Secure flag，
+  # 也用它做 enforceSameOrigin 的同源比對。
+  NUXT_PUBLIC_APP_URL: "https://${APP_HOST}"
+  NUXT_DISCORD_REDIRECT_URI: "https://${APP_HOST}/auth/discord"
+  # 可信代理層數 = 1（只有 host 上的 nginx 那一跳）。
+  # 應用會取 X-Forwarded-For 由右往左數第 1 筆當來源 IP。
+  # 這只有在 nginx 用 `proxy_set_header X-Forwarded-For $remote_addr;`（覆寫）
+  # 時才安全 —— 見 nginx-journey.conf.example。若改回 $proxy_add_x_forwarded_for
+  # （附加語意），最左值由用戶端提供，請把這個值設回 0。
+  NUXT_TRUSTED_PROXY_HOPS: "1"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: journey-unfinished
+  namespace: journey-unfinished
+  labels:
+    app.kubernetes.io/name: journey-unfinished
+spec:
+  replicas: 1
+  # SQLite 單寫者：滾動更新會讓新舊 pod 同時掛同一顆 PVC，必須 Recreate。
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: journey-unfinished
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: journey-unfinished
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: journey-unfinished:${IMAGE_TAG}
+          # 映像是本機 build 後 ctr import 進 containerd 的，沒有 registry 可拉。
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: journey-config
+            - secretRef:
+                name: journey-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              # sharp 重新編碼圖片會吃 CPU 與記憶體，比純 SSR 需要多一點餘裕
+              cpu: "2"
+              memory: 1Gi
+          startupProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 2
+            failureThreshold: 45
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          # 刻意用 tcpSocket 而非 /api/health：health 會打 SQLite，
+          # 資料庫暫時鎖住時用它當 liveness 會造成無止境重啟。
+          livenessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: journey-data
+        - name: tmp
+          # sharp 解碼大圖時可能落暫存檔；根檔案系統唯讀，給它一塊記憶體碟
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: journey-unfinished
+  namespace: journey-unfinished
+spec:
+  # 沒有 ingress controller，由 host 上的 nginx 直接 proxy_pass 到這個 NodePort。
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: journey-unfinished
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      nodePort: ${APP_NODEPORT}
+---
+# 預設拒絕，只放行從節點進來的 NodePort 流量；出向只留 DNS 與 HTTPS
+# （Discord OAuth 需要連 discord.com）。
+# k3s 內建 kube-router 的 NetworkPolicy controller，不需額外安裝。
+#
+# NodePort 流量在 externalTrafficPolicy: Cluster（預設）下會被 kube-proxy
+# SNAT 成節點位址，所以來源會落在 pod CIDR 或節點 LAN IP，兩者都放行。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: journey-default-deny
+  namespace: journey-unfinished
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.42.0.0/16
+        - ipBlock:
+            cidr: 192.168.0.10/32
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # 只放行對外 HTTPS（Discord OAuth token 交換與 profile 查詢），
+    # 並排除 RFC1918，避免這個 pod 被拿來當跳板打 NAS 上其他服務。
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

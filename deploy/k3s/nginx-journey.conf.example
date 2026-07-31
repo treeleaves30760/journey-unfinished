@@ -1,0 +1,85 @@
+# /etc/nginx/conf.d/journey.conf
+#
+# NAS 上既有的三個站台都由 host nginx + certbot 收 HTTPS，這個新站台沿用同一
+# 條路徑。後端是 k3s Service 的 NodePort —— 叢集裡沒有 ingress controller
+# （config.yaml 停用了 traefik 與 servicelb，好讓 nginx 獨佔 80/443）。
+#
+# 與既有三份 conf 的兩處刻意差異，兩處都是安全相關：
+#
+# 1) X-Forwarded-For 用 $remote_addr（覆寫）而非 $proxy_add_x_forwarded_for
+#    （附加）。應用取這個 header 由右往左數第 N 筆當來源 IP
+#    （NUXT_TRUSTED_PROXY_HOPS=1）。用附加語意的話，鏈上最左那筆是用戶端自己
+#    送進來的，任何人都能偽造來源 IP 讓限流失效。覆寫才讓那一筆等於真實 TCP
+#    對端。改動這一行時務必同步調整 NUXT_TRUSTED_PROXY_HOPS。
+#
+# 2) X-Forwarded-Proto 用 $scheme 而非 $http_x_forwarded_proto。既有的三份
+#    conf 是把「用戶端送進來的同名 header」原封轉發，正常請求下那是空值，
+#    而且完全由用戶端控制。$scheme 才是這一跳真實的協定。
+#
+# 套用：
+#   sudo cp deploy/k3s/nginx-journey.conf.example /etc/nginx/conf.d/journey.conf
+#   sudo vi /etc/nginx/conf.d/journey.conf          # 改 server_name 與 NodePort
+#   sudo nginx -t && sudo systemctl reload nginx
+#   sudo certbot --nginx -d journey-unfinished.xn--essy41b.com   # 由 certbot 補上 443 區塊
+
+# 前提：conf.d/cloudflare-realip.conf 必須先安裝（scripts/fix-existing-nginx.sh 會裝）。
+# 站台走 Cloudflare 代理，沒有那份設定的話 $remote_addr 是 CF 邊緣節點，
+# 下面的 limit_req 與 X-Forwarded-For 都會以 CF 邊緣為準，等於全站共用一個桶。
+#
+# 邊界限流。應用內建的限流是單一 process 的記憶體桶，重啟就歸零，
+# 而且要等請求進到 Node 才判斷；這一層先把量擋在 nginx。
+# 這兩個 zone 定義必須在 server{} 之外（conf.d 本身已被 include 在 http{} 內）。
+limit_req_zone $binary_remote_addr zone=journey_general:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=journey_write:10m   rate=1r/s;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name journey-unfinished.xn--essy41b.com;
+
+    # certbot 跑完後會自己插入 301 導向；在那之前先讓 ACME challenge 走 HTTP。
+
+    # 圖片上傳：應用層限單檔 5 MiB／最多 2 檔，這裡留餘裕即可。
+    # 不要沿用預設的 1m，那會擋掉正常上傳。
+    client_max_body_size 12m;
+    client_body_timeout 60s;
+
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 60s;
+
+    proxy_redirect off;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host;
+
+    # k3s Service journey-unfinished 的 NodePort（見 deploy.env 的 APP_NODEPORT）
+    set $journey_upstream http://127.0.0.1:30300;
+
+    location / {
+        limit_req zone=journey_general burst=20 nodelay;
+        proxy_pass $journey_upstream;
+    }
+
+    # 寫入端點限得更緊：建立旅箋、留言、刪除。
+    # burst 給得小，讓正常操作不受影響但擋掉腳本洗版。
+    location /api/checkins {
+        limit_req zone=journey_write burst=5 nodelay;
+        proxy_pass $journey_upstream;
+    }
+
+    # Discord OAuth callback：一個人短時間內不會重複登入很多次
+    location /auth/ {
+        limit_req zone=journey_write burst=5 nodelay;
+        proxy_pass $journey_upstream;
+    }
+
+    # 使用者上傳的圖片是公開靜態內容，走 general zone 即可，
+    # 應用已對它設了 immutable 快取與 sandbox CSP。
+    location /uploads/ {
+        limit_req zone=journey_general burst=50 nodelay;
+        proxy_pass $journey_upstream;
+    }
+}
