@@ -18,9 +18,11 @@ export default defineEventHandler(async (event) => {
   let photo: string | null = null
   let avatar: string | null = null
   try {
-    photo = saveImage(files.get('photo'), 'photo')
+    // saveImage 會用 sharp 重新解碼並剝除 EXIF/GPS，因此是非同步的；
+    // 被 reject 時一樣落到下方 catch，圖片回滾邏輯不受影響。
+    photo = await saveImage(files.get('photo'), 'photo')
     if (!photo) throw createError({ statusCode: 400, message: '請上傳一張旅途照片' })
-    avatar = saveImage(files.get('avatar'), 'avatar')
+    avatar = await saveImage(files.get('avatar'), 'avatar')
     const checkin = createCheckin(input, photo, avatar, user.id)
     setResponseStatus(event, 201)
     return { checkin }
