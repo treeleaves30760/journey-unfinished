@@ -144,8 +144,17 @@ done
 
 ## 更新版本
 
-`imagePullPolicy: IfNotPresent` + 沒有 registry，所以**同一個 tag 不會重新載入**。
-每次改版一定要遞增 tag：
+平常改版跑這一支就好，它會把下面整串包起來（拉程式碼 → 備份 → 建映像 → 遞增 tag →
+部署 → 驗收），任何一步失敗都會停下來並印出回滾指令：
+
+```bash
+ssh -t treeleaves30760nas          # 需要 tty：匯入映像要 sudo 密碼
+cd ~/journey-unfinished
+./deploy/k3s/scripts/update.sh     # tag 自動 +1；要指定就 update.sh 1.2.0
+```
+
+手動做的話：`imagePullPolicy: IfNotPresent` + 沒有 registry，所以**同一個 tag 不會
+重新載入**，每次改版一定要遞增 tag：
 
 ```bash
 git pull
@@ -161,23 +170,29 @@ sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=1.0.1/' deploy/k3s/deploy.env
 
 ## 備份
 
-SQLite 開了 WAL，**直接 `cp` 檔案會拿到不一致的快照**。要用 SQLite 自己的
-線上備份：
+`update.sh` 每次部署前都會自己備份一份到 `~/journey-backups/`。要單獨備份時：
+
+SQLite 開了 WAL，**直接 `cp` 檔案會拿到不一致的快照**（多數新資料還在 `-wal` 裡）。
+要用 SQLite 自己的線上備份：
 
 ```bash
 NS=journey-unfinished
 POD=$(kubectl -n $NS get pod -l app.kubernetes.io/name=journey-unfinished -o name)
+POD=${POD#pod/}
 
+# 相依套件被 nitro 收在 .output/server/node_modules —— Dockerfile 只複製 .output，
+# /app/node_modules 不存在，裸寫 require('better-sqlite3') 會 MODULE_NOT_FOUND。
 kubectl -n $NS exec $POD -- node -e "
-  const D=require('better-sqlite3');
+  const D=require('/app/.output/server/node_modules/better-sqlite3');
   const db=new D('/app/data/journey-unfinished.sqlite',{readonly:true});
   db.exec(\"VACUUM INTO '/tmp/backup.sqlite'\");
+  db.close();
 "
-kubectl -n $NS cp "${POD#pod/}:/tmp/backup.sqlite" ./journey-$(date +%F).sqlite
+kubectl -n $NS cp "$POD:/tmp/backup.sqlite" ./journey-$(date +%F).sqlite
+kubectl -n $NS exec $POD -- rm -f /tmp/backup.sqlite
 
-# 上傳圖片（PVC 在 host 上的實體路徑）
-sudo tar czf uploads-$(date +%F).tgz \
-  -C /var/lib/rancher/k3s/storage/*journey-data*/uploads .
+# 上傳圖片。直接從容器取，不需要 sudo，也不必知道 PVC 在 host 上的實體路徑。
+kubectl -n $NS exec $POD -- tar czf - -C /app/data uploads > uploads-$(date +%F).tgz
 ```
 
 資料庫與 `uploads/` 必須一起備份 —— 兩者分開還原會出現有紀錄沒圖片的孤兒列。
