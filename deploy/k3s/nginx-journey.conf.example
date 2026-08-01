@@ -1,30 +1,31 @@
-# /etc/nginx/conf.d/journey.conf
+# 反向代理範本：host nginx → k3s Service 的 NodePort
 #
-# NAS 上既有的三個站台都由 host nginx + certbot 收 HTTPS，這個新站台沿用同一
-# 條路徑。後端是 k3s Service 的 NodePort —— 叢集裡沒有 ingress controller
-# （config.yaml 停用了 traefik 與 servicelb，好讓 nginx 獨佔 80/443）。
-#
-# 與既有三份 conf 的兩處刻意差異，兩處都是安全相關：
-#
-# 1) X-Forwarded-For 用 $remote_addr（覆寫）而非 $proxy_add_x_forwarded_for
-#    （附加）。應用取這個 header 由右往左數第 N 筆當來源 IP
-#    （NUXT_TRUSTED_PROXY_HOPS=1）。用附加語意的話，鏈上最左那筆是用戶端自己
-#    送進來的，任何人都能偽造來源 IP 讓限流失效。覆寫才讓那一筆等於真實 TCP
-#    對端。改動這一行時務必同步調整 NUXT_TRUSTED_PROXY_HOPS。
-#
-# 2) X-Forwarded-Proto 用 $scheme 而非 $http_x_forwarded_proto。既有的三份
-#    conf 是把「用戶端送進來的同名 header」原封轉發，正常請求下那是空值，
-#    而且完全由用戶端控制。$scheme 才是這一跳真實的協定。
+# 這份部署假設叢集裡沒有 ingress controller，由 host 上的 nginx 獨佔 80/443
+# 並用 certbot 管憑證（見 README「為什麼沒有 Ingress 物件」）。
 #
 # 套用：
 #   sudo cp deploy/k3s/nginx-journey.conf.example /etc/nginx/conf.d/journey.conf
-#   sudo vi /etc/nginx/conf.d/journey.conf          # 改 server_name 與 NodePort
+#   sudo vi /etc/nginx/conf.d/journey.conf        # 改 server_name 與 NodePort
 #   sudo nginx -t && sudo systemctl reload nginx
-#   sudo certbot --nginx -d journey-unfinished.xn--essy41b.com   # 由 certbot 補上 443 區塊
-
-# 前提：conf.d/cloudflare-realip.conf 必須先安裝（scripts/fix-existing-nginx.sh 會裝）。
-# 站台走 Cloudflare 代理，沒有那份設定的話 $remote_addr 是 CF 邊緣節點，
-# 下面的 limit_req 與 X-Forwarded-For 都會以 CF 邊緣為準，等於全站共用一個桶。
+#   sudo certbot --nginx -d <你的網域>             # 由 certbot 補上 443 區塊
+#
+# 兩個 proxy_set_header 值得特別說明，兩處都是安全相關，抄改既有 vhost 時很容易寫錯：
+#
+# 1) X-Forwarded-For 用 $remote_addr（覆寫）而非 $proxy_add_x_forwarded_for
+#    （附加）。應用取這個 header 由右往左數第 N 筆當來源 IP
+#    （NUXT_TRUSTED_PROXY_HOPS，這個拓撲下是 1）。用附加語意的話，鏈上最左那筆
+#    是用戶端自己送進來的，任何人都能偽造來源 IP 讓限流失效。覆寫才讓那一筆等於
+#    真實 TCP 對端。改動這一行時務必同步調整 NUXT_TRUSTED_PROXY_HOPS。
+#
+# 2) X-Forwarded-Proto 用 $scheme，不要用 $http_x_forwarded_proto。後者是把
+#    「用戶端送進來的同名 header」原封轉發，正常請求下是空值，而且完全由用戶端
+#    控制。$scheme 才是這一跳真實的協定。
+#
+# 前提：若 origin 在 CDN／反向代理（例如 Cloudflare）之後，必須先設定 real_ip
+# （`set_real_ip_from` + `real_ip_header`），否則 nginx 看到的 $remote_addr 是
+# 邊緣節點而不是訪客 —— 下面的 limit_req 會變成全站共用一個桶，傳給應用的
+# X-Forwarded-For 也會失準。那份設定影響該主機上的所有站台，屬於主機層設定，
+# 不在這個 repo 裡。
 #
 # 邊界限流。應用內建的限流是單一 process 的記憶體桶，重啟就歸零，
 # 而且要等請求進到 Node 才判斷；這一層先把量擋在 nginx。
@@ -35,7 +36,7 @@ limit_req_zone $binary_remote_addr zone=journey_write:10m   rate=1r/s;
 server {
     listen 80;
     listen [::]:80;
-    server_name journey-unfinished.xn--essy41b.com;
+    server_name journey.example.com;
 
     # certbot 跑完後會自己插入 301 導向；在那之前先讓 ACME challenge 走 HTTP。
 

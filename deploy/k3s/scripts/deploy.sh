@@ -19,6 +19,9 @@ command -v envsubst >/dev/null || { echo "缺少 envsubst：sudo apt install -y 
 set -a; source "$HERE/deploy.env"; set +a
 : "${APP_HOST:?deploy.env 未設定 APP_HOST}"
 : "${IMAGE_TAG:?deploy.env 未設定 IMAGE_TAG}"
+# NODE_CIDR 沒有通用預設值 —— 猜錯會讓 NetworkPolicy 擋掉 NodePort 進來的流量，
+# 症狀是「部署成功但 nginx 502」，很難一眼看出原因。寧可在這裡就停下來。
+: "${NODE_CIDR:?deploy.env 未設定 NODE_CIDR（節點內網位址，例如 10.0.0.1/32。查法見 deploy.env.example）}"
 : "${APP_NODEPORT:=30300}"; export APP_NODEPORT
 : "${DATA_SIZE:=10Gi}"; export DATA_SIZE
 
@@ -32,7 +35,7 @@ ADMIN_DISCORD_IDS="$(read_env NUXT_ADMIN_DISCORD_IDS)"
   || { echo ".env 內的 NUXT_DISCORD_CLIENT_ID / NUXT_DISCORD_CLIENT_SECRET 是空的" >&2; exit 1; }
 
 echo "==> namespace / 應用資源（APP_HOST=${APP_HOST}, IMAGE_TAG=${IMAGE_TAG}）"
-envsubst '${APP_HOST} ${IMAGE_TAG} ${APP_NODEPORT} ${DATA_SIZE}' < "$HERE/app.yaml" | kubectl apply -f -
+envsubst '${APP_HOST} ${IMAGE_TAG} ${APP_NODEPORT} ${DATA_SIZE} ${NODE_CIDR}' < "$HERE/app.yaml" | kubectl apply -f -
 
 echo "==> Secret（--dry-run | apply 讓重跑可以就地更新）"
 kubectl -n "$NS" create secret generic journey-secrets \
