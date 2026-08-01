@@ -74,6 +74,8 @@ cd "$REPO_ROOT"
 
 CURRENT_TAG="$(grep -E '^IMAGE_TAG=' "$DEPLOY_ENV" | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
 [[ -n "$CURRENT_TAG" ]] || die "deploy.env 讀不到 IMAGE_TAG"
+# 上次成功部署的 commit，由本腳本在部署成功後寫回 deploy.env。第一次跑時不存在。
+DEPLOYED_COMMIT="$(grep -E '^DEPLOYED_COMMIT=' "$DEPLOY_ENV" | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
 RUNNING_IMAGE="$(kubectl -n "$NS" get deploy journey-unfinished \
   -o jsonpath='{.spec.template.spec.containers[0].image}')"
 echo "  目前 deploy.env  IMAGE_TAG=$CURRENT_TAG"
@@ -88,14 +90,25 @@ git pull --ff-only
 AFTER="$(git rev-parse HEAD)"
 
 if [[ "$BEFORE" == "$AFTER" ]]; then
-  echo "  沒有新的 commit（HEAD 仍是 ${AFTER:0:7}）"
-  if [[ "$RUNNING_IMAGE" == "journey-unfinished:$CURRENT_TAG" && -z "$FORCE" ]]; then
-    bold $'\n已經是最新版本，沒有需要部署的東西。要強制重建請加 --force。'
-    exit 0
-  fi
+  echo "  這次沒有拉到新的 commit（HEAD 仍是 ${AFTER:0:7}）"
 else
   echo "  ${BEFORE:0:7} -> ${AFTER:0:7}"
-  git --no-pager log --oneline "$BEFORE..$AFTER" | sed 's/^/    /'
+fi
+
+# 「有沒有東西要部署」不能看這次 pull 有沒有拉到 commit —— 很多人（含 README 的第一次
+# 使用說明）會先自己 git pull 再跑這支，那樣新 commit 早就進來了，這次 pull 必然是
+# "Already up to date"，據此跳過會漏掉真正該部署的版本。
+# 正確的判準是「線上跑的映像是不是用現在這個 HEAD 建的」，記在 deploy.env 的 DEPLOYED_COMMIT。
+if [[ -n "$DEPLOYED_COMMIT" ]] && git cat-file -e "${DEPLOYED_COMMIT}^{commit}" 2>/dev/null; then
+  echo "  上次部署的 commit ${DEPLOYED_COMMIT:0:7}"
+  if [[ "$AFTER" == "$DEPLOYED_COMMIT" && "$RUNNING_IMAGE" == "journey-unfinished:$CURRENT_TAG" && -z "$FORCE" ]]; then
+    bold $'\n線上映像就是用目前 HEAD 建的，沒有需要部署的東西。要強制重建請加 --force。'
+    exit 0
+  fi
+  echo "  尚未上線的 commit："
+  git --no-pager log --oneline "${DEPLOYED_COMMIT}..${AFTER}" | sed 's/^/    /' || true
+else
+  echo "  deploy.env 沒有可用的 DEPLOYED_COMMIT 記錄，一律視為需要部署"
 fi
 
 # 決定新 tag：沒指定就把最後一段 +1
@@ -216,6 +229,15 @@ for h in maygong.nthudsa.com maygong-cms.nthudsa.com nas.xn--essy41b.com; do
 done
 
 trap - ERR
+
+# 記下這個映像是用哪個 commit 建的 —— 下次執行才判斷得出「線上是不是已經是 HEAD」。
+if grep -qE '^DEPLOYED_COMMIT=' "$DEPLOY_ENV"; then
+  sed -i "s/^DEPLOYED_COMMIT=.*/DEPLOYED_COMMIT=${AFTER}/" "$DEPLOY_ENV"
+else
+  printf '\n# 最後一次成功部署的 commit（由 update.sh 自動維護，不要手改）\nDEPLOYED_COMMIT=%s\n' \
+    "$AFTER" >> "$DEPLOY_ENV"
+fi
+
 bold $'\n更新完成。'
 cat <<EOF
   版本      $CURRENT_TAG -> ${NEW_TAG}（commit ${AFTER:0:7}）
