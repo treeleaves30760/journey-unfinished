@@ -44,6 +44,11 @@ bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 step() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 die()  { red "錯誤：$*"; exit 1; }
 
+# 讀 deploy.env 裡的一個鍵。刻意不用 grep：grep 找不到會回傳 1，配上 set -e + pipefail
+# 會讓整支腳本「印不出任何訊息就結束」—— 而「這個鍵不存在」對 DEPLOYED_COMMIT 這種
+# 選擇性設定是正常狀況，不是錯誤。sed -n s///p 沒中就是輸出空字串、退出碼 0。
+read_key() { sed -n "s/^$1=//p" "$DEPLOY_ENV" | tail -1 | tr -d '[:space:]'; }
+
 FORCE=""
 NEW_TAG=""
 for arg in "$@"; do
@@ -72,10 +77,10 @@ cd "$REPO_ROOT"
 [[ -z "$(git status --porcelain)" ]] \
   || die "工作目錄有未提交的變更，先處理掉再更新：$(git status --short | head -3 | tr '\n' ' ')"
 
-CURRENT_TAG="$(grep -E '^IMAGE_TAG=' "$DEPLOY_ENV" | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
+CURRENT_TAG="$(read_key IMAGE_TAG)"
 [[ -n "$CURRENT_TAG" ]] || die "deploy.env 讀不到 IMAGE_TAG"
-# 上次成功部署的 commit，由本腳本在部署成功後寫回 deploy.env。第一次跑時不存在。
-DEPLOYED_COMMIT="$(grep -E '^DEPLOYED_COMMIT=' "$DEPLOY_ENV" | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
+# 上次成功部署的 commit，由本腳本在部署成功後寫回 deploy.env。第一次跑時不存在，屬正常。
+DEPLOYED_COMMIT="$(read_key DEPLOYED_COMMIT)"
 RUNNING_IMAGE="$(kubectl -n "$NS" get deploy journey-unfinished \
   -o jsonpath='{.spec.template.spec.containers[0].image}')"
 echo "  目前 deploy.env  IMAGE_TAG=$CURRENT_TAG"
@@ -135,8 +140,9 @@ sudo -v
 # ---------------------------------------------------------------------------
 step "備份資料庫與上傳圖片"
 mkdir -p "$BACKUP_DIR"
+# 沒有 pod 時 jsonpath 會報錯，set -e 會讓下一行友善的 die 永遠印不出來
 POD="$(kubectl -n "$NS" get pod -l app.kubernetes.io/name=journey-unfinished \
-  -o jsonpath='{.items[0].metadata.name}')"
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 [[ -n "$POD" ]] || die "找不到執行中的 pod"
 echo "  來源 pod: $POD"
 
@@ -148,7 +154,7 @@ UP_BACKUP="$BACKUP_DIR/uploads-$STAMP.tgz"
 # 先問容器實際位置（找不到再 find），用絕對路徑 require，日後 nitro 換版面也不會默默壞掉。
 DB_MODULE="$(kubectl -n "$NS" exec "$POD" -- sh -c \
   'ls -d /app/.output/server/node_modules/better-sqlite3 2>/dev/null \
-   || find /app -maxdepth 6 -type d -name better-sqlite3 2>/dev/null | head -1')"
+   || find /app -maxdepth 6 -type d -name better-sqlite3 2>/dev/null | head -1' || true)"
 [[ -n "$DB_MODULE" ]] || die "容器裡找不到 better-sqlite3，無法做一致性備份"
 
 # VACUUM INTO 是 SQLite 自己的線上備份：會把 WAL 裡尚未 checkpoint 的內容一起寫進去，
@@ -196,19 +202,19 @@ trap rollback_hint ERR
 
 step "更新 deploy.env 並部署"
 sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$NEW_TAG/" "$DEPLOY_ENV"
-grep -E '^IMAGE_TAG=' "$DEPLOY_ENV" | sed 's/^/  /'
+echo "  IMAGE_TAG=$(read_key IMAGE_TAG)"
 "$HERE/scripts/deploy.sh"
 
 # ---------------------------------------------------------------------------
 # 5. 驗收
 # ---------------------------------------------------------------------------
 step "驗收"
-APP_HOST="$(grep -E '^APP_HOST=' "$DEPLOY_ENV" | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
-APP_NODEPORT="$(grep -E '^APP_NODEPORT=' "$DEPLOY_ENV" | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
+APP_HOST="$(read_key APP_HOST)"
+APP_NODEPORT="$(read_key APP_NODEPORT)"
 APP_NODEPORT="${APP_NODEPORT:-30300}"
 
 DEPLOYED="$(kubectl -n "$NS" get pod -l app.kubernetes.io/name=journey-unfinished \
-  -o jsonpath='{.items[0].spec.containers[0].image}')"
+  -o jsonpath='{.items[0].spec.containers[0].image}' 2>/dev/null || true)"
 [[ "$DEPLOYED" == "journey-unfinished:$NEW_TAG" ]] \
   || die "pod 跑的是 ${DEPLOYED}，不是預期的 journey-unfinished:$NEW_TAG"
 echo "  pod 映像         $DEPLOYED"
