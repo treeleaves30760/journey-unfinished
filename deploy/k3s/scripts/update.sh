@@ -49,6 +49,14 @@ die()  { red "錯誤：$*"; exit 1; }
 # 選擇性設定是正常狀況，不是錯誤。sed -n s///p 沒中就是輸出空字串、退出碼 0。
 read_key() { sed -n "s/^$1=//p" "$DEPLOY_ENV" | tail -1 | tr -d '[:space:]'; }
 
+# 同上，但保留字串內部的空白，並脫掉外層引號。NEIGHBOR_HOSTS 是空白分隔的清單，
+# 用 read_key 會把整串黏成一個網域。
+read_key_list() {
+  sed -n "s/^$1=//p" "$DEPLOY_ENV" | tail -1 \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+          -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+}
+
 FORCE=""
 NEW_TAG=""
 for arg in "$@"; do
@@ -228,11 +236,16 @@ echo "  https://$APP_HOST  $PUBLIC_CODE"
 [[ "$NODEPORT_CODE" == "200" ]] || die "NodePort 健康檢查沒回 200"
 [[ "$PUBLIC_CODE" == "200" ]] || die "對外健康檢查沒回 200（檢查 nginx / Cloudflare）"
 
-# 既有三個站台不該被影響（共用同一台 host nginx）
-for h in maygong.nthudsa.com maygong-cms.nthudsa.com nas.xn--essy41b.com; do
-  printf '  鄰居站台 %-28s %s\n' "$h" \
-    "$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 -H "Host: $h" http://127.0.0.1/ || echo 000)"
-done
+# 同一台 host 上的其他站台共用這台 nginx，這次改動不該波及它們。
+# 清單來自 deploy.env 的 NEIGHBOR_HOSTS（環境專屬，預設空白就跳過）。
+NEIGHBOR_HOSTS="$(read_key_list NEIGHBOR_HOSTS)"
+if [[ -n "$NEIGHBOR_HOSTS" ]]; then
+  # shellcheck disable=SC2086  # 刻意不加引號：這裡就是要按空白拆成多個網域
+  for h in $NEIGHBOR_HOSTS; do
+    printf '  鄰居站台 %-28s %s\n' "$h" \
+      "$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 -H "Host: $h" http://127.0.0.1/ || echo 000)"
+  done
+fi
 
 trap - ERR
 

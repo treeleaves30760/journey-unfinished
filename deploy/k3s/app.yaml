@@ -178,8 +178,11 @@ spec:
     - from:
         - ipBlock:
             cidr: 10.42.0.0/16
+        # 節點自己的位址。NodePort 流量經 kube-proxy SNAT 後來源是節點 IP，
+        # 不放行的話 host nginx 的 proxy_pass 會被這條 policy 擋掉。
+        # 由 deploy.env 的 NODE_CIDR 提供（環境專屬，沒有通用預設值）。
         - ipBlock:
-            cidr: 192.168.0.10/32
+            cidr: ${NODE_CIDR}
       ports:
         - protocol: TCP
           port: 3000

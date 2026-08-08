@@ -1,57 +1,58 @@
-# 部署到 treeleaves30760nas（k3s）
+# 部署到 k3s
 
-目標主機盤點（2026-07-31 重新確認）：
+單節點 k3s + host nginx 的部署資產：manifest、建置匯入腳本與 runbook。
 
-| 項目 | 現況 |
+> **環境專屬值不在這個 repo。** 主機位址、對外網域、同一台機器上的其他站台、
+> 防火牆規則——那些是基礎設施資訊，屬於獨立的（且應為 private 的）repo。
+> 這裡的檔案一律用 placeholder，實際值填在 `deploy.env`（已被 `.gitignore`）。
+
+## 這份部署假設的環境
+
+| 項目 | 假設 |
 |---|---|
-| 主機 | `treeleaves30760nas` / 192.168.0.10，Ubuntu 22.04.5，amd64，44 核 / 94 GiB / 741 GiB 可用 |
-| k3s | v1.36.2+k3s1，單節點 control-plane，containerd 2.3.2 |
-| Ingress controller | **無**。`/etc/rancher/k3s/config.yaml` 已 `disable: [traefik, servicelb]` |
-| Storage | `local-path`（預設且唯一的 StorageClass） |
-| 對外入口 | host nginx 1.18 + certbot，獨佔 80/443 |
-| 既有站台 | `maygong.nthudsa.com`→:3000、`maygong-cms.nthudsa.com`→:1337、`nas.xn--essy41b.com`→:12001，皆正常（301 + Let's Encrypt） |
-| 對外 | 公網 IP 114.34.222.201，NAS 在 NAT 後面 |
-| CDN／WAF | **Cloudflare 代理**（orange cloud）。`nas.xn--essy41b.com` 等站台皆解析到 CF anycast IP |
-| 佔用中的埠 | 80/443（nginx）、3000（`nthu-maychu-frontend`）、1337、12001、6443（k3s API） |
+| k3s | 單節點 control-plane |
+| Ingress controller | **無**（見下節） |
+| StorageClass | 有一個可用的預設 StorageClass（例如 `local-path`） |
+| 對外入口 | host 上的 nginx + certbot，獨佔 80/443 |
+| Registry | **無**。映像在目標主機上建好後直接匯入 containerd |
 
 ## 為什麼沒有 Ingress 物件
 
 k3s 內建的 ServiceLB（`svclb` DaemonSet）會讓 Traefik 以 hostPort 綁 80/443，
-而那組 CNI portmap 的 DNAT 規則在 PREROUTING 就攔截封包 —— nginx 雖然還在
-listen，但收不到任何外部流量，既有三個站台會全部變成 Traefik 的 404。
+而那組 CNI portmap 的 DNAT 規則在 PREROUTING 就攔截封包 —— host nginx 雖然還在
+listen，但收不到任何外部流量，同一台機器上既有的站台會全部變成 Traefik 的 404。
 
-現在的解法是在 k3s 層直接停用兩者，讓 nginx 維持唯一入口。代價是叢集裡沒有
+解法是在 k3s 層直接停用兩者（`/etc/rancher/k3s/config.yaml` 的
+`disable: [traefik, servicelb]`），讓 nginx 維持唯一入口。代價是叢集裡沒有
 ingress controller，所以這裡用 **NodePort Service + nginx `proxy_pass`**：
 
 ```
-瀏覽器 ──443──▶ Cloudflare 邊緣（TLS 終止 + WAF）
+瀏覽器 ──443──▶ [CDN／WAF，選用]
                  └──443──▶ nginx (host, certbot 憑證, limit_req 邊界限流)
-                            └─▶ 127.0.0.1:30300 (NodePort)
+                            └─▶ 127.0.0.1:${APP_NODEPORT} (NodePort)
                                  └─▶ Service journey-unfinished:3000
                                       └─▶ Pod (Nitro, uid 1001, 唯讀根檔案系統)
-                                           └─▶ PVC local-path /app/data
+                                           └─▶ PVC /app/data
 ```
 
-### Cloudflare 這一層必須先處理
+比起「再裝一個 ingress controller」，這樣少一層轉發、少一組要維護的 CRD，
+而且 TLS 與憑證續期沿用主機上既有的 certbot 流程。
 
-nginx 目前**沒有任何 `set_real_ip_from` 設定**，所以它看到的 `$remote_addr` 是
-Cloudflare 邊緣節點而不是訪客。在這個前提下部署的話：
+### 若 origin 在 CDN 之後
 
-- nginx 的 `limit_req`（key 是 `$binary_remote_addr`）會以 CF 邊緣為單位，全站
-  幾乎共用一個桶
-- 傳給應用的 `X-Forwarded-For` 會是 CF 邊緣位址，應用層限流一樣失準
+必須先在 host nginx 設定 real_ip（`set_real_ip_from` + `real_ip_header`），
+否則 nginx 看到的 `$remote_addr` 是 CDN 邊緣節點而不是訪客：
+
+- nginx 的 `limit_req`（key 是 `$binary_remote_addr`）會以邊緣節點為單位，
+  全站幾乎共用一個桶
+- 傳給應用的 `X-Forwarded-For` 會是邊緣位址，應用層限流一樣失準
 - access log 記錄不到真實訪客
 
-`scripts/fix-existing-nginx.sh` 會安裝 `conf.d/cloudflare-realip.conf`
-（`real_ip_header CF-Connecting-IP` + CF 官方網段），修好之後 `$remote_addr`
-才是真實客戶端，本文件其餘設定的前提才成立。
+那份設定影響該主機上的**所有**站台，屬於主機層設定，不在這個 repo 裡。
 
-> Origin（114.34.222.201）目前可被直接連線，繞過 Cloudflare。那類請求的來源不在
-> CF 網段，`real_ip` 不會套用，限流仍然正確 —— 但會繞過 Cloudflare 的 WAF／DDoS
-> 防護。若在意，可在路由器或防火牆只放行 CF 網段連入 80/443。
-
-比起「再裝一個 ingress controller」，這樣少一層轉發、少一組要維護的 CRD，
-而且 TLS 與憑證續期沿用你既有的 certbot 流程。
+另外要留意：CDN 通常也負責隱藏 origin IP。如果 origin 可以被直接連線，那類請求會
+繞過 CDN 的 WAF／DDoS 防護（應用層與 nginx 的限流仍然有效，因為直連請求的來源不在
+CDN 網段，real_ip 不會套用）。要真正擋掉，得在路由器或防火牆限制來源。
 
 ---
 
@@ -59,23 +60,18 @@ Cloudflare 邊緣節點而不是訪客。在這個前提下部署的話：
 
 ### 0. 前置
 
-- Discord Developer Portal 的 OAuth2 Redirect URI 加入
-  `https://journey-unfinished.xn--essy41b.com/auth/discord`
-  （**必須用 punycode 且完全一致**，程式會把它原樣送給 Discord）
-- DNS 已就緒：`journey-unfinished.xn--essy41b.com` 已解析到 Cloudflare，
-  Cloudflare 的 origin 需指向 114.34.222.201，路由器 80/443 轉發到 192.168.0.10
-- NAS 上 `sudo apt install -y gettext-base`（需要 `envsubst`）
-- 先跑 `sudo ./deploy/k3s/scripts/fix-existing-nginx.sh`（修 X-Forwarded-Proto +
-  安裝 Cloudflare real_ip；會自動備份並 `nginx -t`）
+- Discord Developer Portal 的 OAuth2 Redirect URI 加入 `https://<APP_HOST>/auth/discord`
+  （程式會把 `APP_HOST` 原樣送給 Discord，兩邊必須完全一致；IDN 網域必須用 punycode）
+- DNS 已指向 origin，路由器 80/443 已轉發到節點
+- 目標主機上 `sudo apt install -y gettext-base`（需要 `envsubst`）
 
-### 1. 把程式碼放到 NAS
+### 1. 把程式碼放到目標主機
 
-映像必須在 NAS 上建。Mac 是 arm64、NAS 是 amd64，而 `better-sqlite3` 與
-`sharp` 都是原生模組 —— 跨架構要走 buildx + QEMU，編譯很慢；NAS 44 核直接建
-更快也更可靠。
+映像必須在目標主機上建 —— 開發機常是 arm64、部署主機常是 amd64，而
+`better-sqlite3` 與 `sharp` 都是原生模組，跨架構要走 buildx + QEMU，編譯很慢。
 
 ```bash
-ssh treeleaves30760nas
+ssh <部署主機>
 git clone https://github.com/treeleaves30760/journey-unfinished.git
 cd journey-unfinished
 ```
@@ -87,7 +83,15 @@ cp .env.example .env
 vi .env          # NUXT_DISCORD_CLIENT_ID / _SECRET / NUXT_ADMIN_DISCORD_IDS
 
 cp deploy/k3s/deploy.env.example deploy/k3s/deploy.env
-vi deploy/k3s/deploy.env    # APP_HOST、IMAGE_TAG、APP_NODEPORT
+vi deploy/k3s/deploy.env    # APP_HOST、IMAGE_TAG、APP_NODEPORT、NODE_CIDR
+```
+
+`NODE_CIDR` 是節點自己的內網位址，`app.yaml` 的 NetworkPolicy 要放行它（NodePort
+流量經 kube-proxy SNAT 後來源是節點 IP）。沒填的話 `deploy.sh` 會直接停下來 ——
+猜錯的症狀是「部署成功但 nginx 502」，很難一眼看出原因。查法：
+
+```bash
+kubectl get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'
 ```
 
 `.env` 只被 `deploy.sh` 讀來建 Secret，不會進映像（`.dockerignore` 已排除），
@@ -118,20 +122,21 @@ Secret、Deployment、NodePort Service、NetworkPolicy，等 rollout 完成，
 sudo cp deploy/k3s/nginx-journey.conf.example /etc/nginx/conf.d/journey.conf
 sudo vi /etc/nginx/conf.d/journey.conf     # 改 server_name 與 NodePort
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d journey-unfinished.xn--essy41b.com
+sudo certbot --nginx -d <APP_HOST>
 ```
 
 ### 6. 驗收
 
 ```bash
-curl -si https://journey-unfinished.xn--essy41b.com/api/health
+curl -si https://<APP_HOST>/api/health
 
 # 應用層安全標頭（由 nuxt.config.ts 的 routeRules 送出）
-curl -sS -D - -o /dev/null https://journey-unfinished.xn--essy41b.com/ \
+curl -sS -D - -o /dev/null https://<APP_HOST>/ \
   | grep -iE 'content-security-policy|strict-transport|x-frame|x-content-type|permissions-policy'
 
-# 既有三個站台不可受影響
-for h in maygong.nthudsa.com maygong-cms.nthudsa.com nas.xn--essy41b.com; do
+# 同一台主機上的其他站台不可受影響（它們共用這台 nginx）。
+# 把網域列在 deploy.env 的 NEIGHBOR_HOSTS，update.sh 每次部署後會自動跑這項。
+for h in $NEIGHBOR_HOSTS; do
   curl -s -o /dev/null -w "$h %{http_code}\n" -H "Host: $h" http://127.0.0.1/
 done
 
@@ -148,7 +153,7 @@ done
 部署 → 驗收），任何一步失敗都會停下來並印出回滾指令：
 
 ```bash
-ssh -t treeleaves30760nas          # 需要 tty：匯入映像要 sudo 密碼
+ssh -t <部署主機>                   # 需要 tty：匯入映像要 sudo 密碼
 cd ~/journey-unfinished
 ./deploy/k3s/scripts/update.sh     # tag 自動 +1；要指定就 update.sh 1.2.0
 ```
@@ -211,4 +216,4 @@ kubectl -n $NS exec $POD -- tar czf - -C /app/data uploads > uploads-$(date +%F)
 | `readOnlyRootFilesystem: true` + `/tmp` tmpfs | 應用只需要寫 `/app/data`。tmpfs 給 sharp 解碼大圖時的暫存空間 |
 | memory limit 1Gi | sharp 重新編碼（剝除 EXIF）比純 SSR 吃記憶體，比原本的 768Mi 多留餘裕 |
 | `automountServiceAccountToken: false` | 應用不呼叫 k8s API，掛 token 只是白送一組憑證給 RCE |
-| NetworkPolicy 出向排除 RFC1918 | 避免這個 pod 被拿來當跳板打 NAS 上其他服務（另外兩個站台、rustdesk、k3s API 6443） |
+| NetworkPolicy 出向排除 RFC1918 | 避免這個 pod 被拿來當跳板打同一台主機或區網上的其他服務（含 k3s API） |
