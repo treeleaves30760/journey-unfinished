@@ -27,11 +27,13 @@ test('the compose form offers worldwide place fields and a live markdown preview
   await page.goto('/checkins/new')
   await waitForHydration(page)
 
-  // 全球化：國家是完整的 ISO 清單（分洲別群組），行政區是自由文字而不是臺灣 22 縣市的列舉
-  const country = page.locator('select').filter({ has: page.locator('optgroup[label="亞洲"]') })
-  await expect(country).toHaveValue('TW')
-  await expect(country.locator('optgroup')).toHaveCount(6)
-  await country.selectOption('JP')
+  // 全球化：區域是完整的 ISO 清單（分洲別群組），行政區是自由文字而不是臺灣 22 縣市的列舉
+  const region = page.locator('select').filter({ has: page.locator('optgroup[label="亞洲"]') })
+  await expect(region).toHaveValue('TW')
+  await expect(region.locator('optgroup')).toHaveCount(6)
+  // 選項只有名稱，沒有國旗 emoji —— 介面刻意不顯示主權符號
+  await expect(region.locator('option[value="JP"]')).toHaveText('日本')
+  await region.selectOption('JP')
   await expect(page.locator('#taiwan-counties')).toHaveCount(0)
 
   await page.locator('#travel-message').fill('# 竹林的清晨\n\n- 廣角鏡\n- 底片兩捲\n\n> 下次想在秋天再來。')
@@ -110,8 +112,8 @@ test('a phone capture becomes a draft that the desktop form picks up and publish
   await expect(page.locator('.picker-manual input').first()).toHaveValue('35.0169')
 
   // 補完剩下的欄位後直接發佈：草稿的照片會被沿用，不必再上傳一次。
-  // 國家也在這一步才確定——手機上沒有網路或反查失敗時，草稿會停在預設的臺灣，
-  // 回到電腦改成正確的國家是這個流程本來就該支援的事。
+  // 區域也在這一步才確定——手機上沒有網路或反查失敗時，草稿會停在預設的臺灣，
+  // 回到電腦改成正確的區域是這個流程本來就該支援的事。
   await page.locator('select').filter({ has: page.locator('optgroup[label="亞洲"]') }).selectOption('JP')
   await page.getByLabel(/行政區/).fill('京都府')
   await page.getByLabel(/地點名稱/).fill('嵐山竹林小徑')

@@ -9,8 +9,8 @@
 #   Photon 的 lang 參數只支援 default/de/en/fr —— **沒有中文**。這裡一律用 lang=default，
 #   也就是 OSM 的 name 標籤（當地語言）：臺灣的地名是中文、日本是日文、冰島是冰島文。
 #   對旅遊紀錄來說看到的就是招牌上的名字，通常反而更貼近現場；但「行政區」欄位會是
-#   當地語言，使用者可以在表單裡自己改。國家名稱不受影響 —— 那是由 utils/countries.ts
-#   依國碼推導的，跟上游無關。
+#   當地語言，使用者可以在表單裡自己改。區域名稱不受影響 —— 那是由 utils/countries.ts
+#   依代碼推導的，跟上游無關。
 #
 # 套用方式（在 NAS 上）：
 #   ./deploy/k3s/scripts/deploy-geocoder.sh
@@ -30,7 +30,13 @@ metadata:
     pod-security.kubernetes.io/enforce-version: latest
 ---
 # 全球索引。local-path 是 k3s 內建的預設 StorageClass，實際落在
-# /var/lib/rancher/k3s/storage/<pvc>/ —— 也就是 NAS 的系統碟，請先確認容量。
+# /var/lib/rancher/k3s/storage/<pvc>/ —— 也就是系統碟，請先確認容量。
+#
+# 刻意用系統碟而不是大容量的 HDD 池：Lucene 查詢是大量的小型隨機讀取，而 RAIDZ 的
+# 隨機讀 IOPS 大約只等於「每個 vdev 一顆碟」，沒命中快取時會慢得很明顯。
+# 真要放 ZFS 的話那個 dataset 至少要 recordsize=16K、compression=lz4、atime=off，
+# 詳見 deploy/k3s/README.md 的「索引要放哪個磁碟」。
+#
 # 注意：local-path 不會真的強制配額，這個數字是給人看的，不是給核心看的。
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -72,7 +78,7 @@ spec:
             - name: http
               containerPort: 2322
           env:
-            # planet = 全球。國家別的 extract 在上游已經停止更新（最後一版是 2025-07），
+            # planet = 全球。單一區域的 extract 在上游已經停止更新（最後一版是 2025-07），
             # 全球版則是每週重建，所以即使只想搜臺灣也該用 planet。
             - name: REGION
               value: planet
@@ -85,8 +91,9 @@ spec:
               value: ${PHOTON_UPDATE_STRATEGY}
             - name: UPDATE_INTERVAL
               value: ${PHOTON_UPDATE_INTERVAL}
-            # JVM 堆疊。Photon 主要靠作業系統的 page cache 讀索引，堆疊不需要很大；
-            # 把記憶體留給 page cache 反而更快。
+            # JVM 堆疊。Lucene 刻意把索引放在 heap 之外的 mmap 檔案裡，靠作業系統的
+            # page cache 提供 —— heap 開大不會快取到索引資料，只會把原本能當快取的記憶體
+            # 吃掉，順便讓 GC 停頓變長。上游說的「建議 64 GB」是系統快取，不是 heap。
             - name: JAVA_PARAMS
               value: -Xmx${PHOTON_HEAP}
             - name: LOG_LEVEL

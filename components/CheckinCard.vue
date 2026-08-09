@@ -14,7 +14,7 @@ const place = computed(() => placeLabel(props.checkin))
     <NuxtLink :to="`/checkins/${checkin.id}`" class="card-photo" :class="`scene-${(checkin.id % 6) + 1}`">
       <img v-if="checkin.photo" :src="checkin.photo" :alt="`${checkin.dollName}在${checkin.location}的照片`" loading="lazy">
       <div v-else class="placeholder-scene" aria-hidden="true"><i class="sun-or-moon" /><i class="hill far" /><i class="hill near" /></div>
-      <span class="county-chip">{{ countryFlag(checkin.countryCode) }} {{ place }}</span>
+      <span class="county-chip">{{ place }}</span>
     </NuxtLink>
     <div class="card-body">
       <div class="card-author">

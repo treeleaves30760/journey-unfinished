@@ -10,17 +10,17 @@
 
 - Nuxt 4 + Vue 3 SSR 響應式介面
 - 首頁滿版分頁、原生 scroll snap 與段落進出場動畫
-- **全球地圖**：OpenStreetMap／Leaflet 真實圖資、互動頭像標記，依旅箋分佈自動框出視野，並可依國家與地區篩選
-- **景點搜尋**：輸入店名或地標就能標好座標；點地圖、拖曳圖釘或按「目前位置」都會自動補上國家與行政區（由伺服器代打上游，可用公用 Nominatim 或自架 Photon，見下方說明）
+- **全球地圖**：OpenStreetMap／Leaflet 真實圖資、互動頭像標記，依旅箋分佈自動框出視野，並可依區域與行政區篩選
+- **景點搜尋**：輸入店名或地標就能標好座標；點地圖、拖曳圖釘或按「目前位置」都會自動補上區域與行政區（由伺服器代打上游，可用公用 Nominatim 或自架 Photon，見下方說明）
 - Discord OAuth2 登入、SQLite 工作階段與 Discord ID 管理員白名單
-- 寫下旅箋：照片、國家／地區、景點、座標、娃娃名稱、日期與心得
+- 寫下旅箋：照片、區域與行政區、景點、座標、娃娃名稱、日期與心得
 - **旅途留言支援 Markdown**，編輯器附工具列、即時預覽與桌機並排模式
 - **草稿**：手機上拍完照、標好地點就先存著，換到電腦登入同一個帳號接著寫完再發佈
 - **手機快速記錄**（`/checkins/quick`）：拍照 → 標位置 → 存草稿，三步收工；長表單另有黏底操作列
 - 6 種通用預設頭像，或在瀏覽器以 Canvas 裁切照片區塊作為頭像
 - 旅箋詳情與訪客留言（匿名，含內容衛生檢查與分層限流）
 - 作者可自行刪除自己的旅箋，照片一併移除
-- 管理中心：會員列表、旅箋檢視與管理員刪除、國家／地區分布統計
+- 管理中心：會員列表、旅箋檢視與管理員刪除、區域／行政區分布統計
 - Nitro API + SQLite 持久化
 - 具總量／欄位／檔案上限的串流 multipart 圖片上傳，上傳圖片一律重新編碼並剝除 EXIF/GPS
 - Docker 多階段 production image、非 root 執行、健康檢查與 Compose volume
@@ -46,7 +46,7 @@
 - **上傳圖片一律以 sharp 重新解碼並重新編碼，藉此剝除全部 EXIF/XMP/IPTC metadata**（含 GPS 座標、拍攝時間、相機序號）。EXIF orientation 會先套用再丟棄，避免直向照片被轉倒。同時限制輸入像素數與輸出最長邊 4096px，防止 decompression bomb
 - 單檔預設限制 5 MiB（可用環境變數調整），multipart 以 Busboy 串流解析並限制總檔案數、欄位數與 request 大小，避免先把無界限請求載入記憶體
 - 上傳檔名由密碼學亂數產生，讀取路由會防止路徑穿越
-- API 對長度、國家代碼、座標、日期、頭像選項做伺服器端驗證；留言 JSON 亦以串流方式限制為 8 KiB
+- API 對長度、區域代碼、座標、日期、頭像選項做伺服器端驗證；留言 JSON 亦以串流方式限制為 8 KiB
 - **Markdown 全程不產生 HTML 字串**：`utils/markdown.ts` 把留言解析成資料樹，`MarkdownView.vue` 用 Vue 的 `h()` 渲染成節點，整條路徑沒有任何 `v-html`。使用者寫的 `<script>` 只會顯示成文字，也因此不依賴任何 sanitizer 是否正確接上；連結只放行 `http`／`https`／`mailto` 與站內相對路徑，外部連結一律補 `noopener noreferrer nofollow`
 - 草稿是使用者尚未公開的內容，**連管理員都讀不到**；非擁有者一律回 404 而不是 403（403 等於洩漏「這個編號存在」），並限制每人最多 20 份，避免變成無上限的空間消耗路徑
 - 景點搜尋由伺服器代打上游，前端 CSP 的 `connect-src` 維持 `'self'`；端點要求登入並限流，關鍵字走與旅箋自由文字相同的衛生規則
@@ -68,7 +68,7 @@ pages/                     首頁、探索地圖、登入、建立旅箋、手�
 middleware/                會員與管理員頁面守衛
 components/                RegionMap、LocationPicker、MarkdownEditor／MarkdownView、卡片、頭像裁切等元件
 composables/               useAuth、useCheckins 等前端共用邏輯
-utils/                     前後端共用工具（安全回跳路徑、國家代碼對照、Markdown 解析）
+utils/                     前後端共用工具（安全回跳路徑、區域代碼對照、Markdown 解析）
 assets/css/main.css        全站視覺與響應式樣式
 server/api/                Nitro JSON / multipart API（旅箋、留言、草稿、地理編碼、管理）
 server/routes/uploads/     上傳圖片讀取路由
@@ -174,7 +174,7 @@ npm run start
 - 留言分層限流、單篇上限與重複內容指紋
 - 旅箋擁有者自刪的權限矩陣（含 `user_id` 為 NULL 的種子資料）
 - Markdown 解析器：語法覆蓋、找不到成對符號時不吞掉後文、巢狀深度上限，以及「HTML 與 `javascript:` 連結不會產生可執行節點」的安全回歸
-- 國家代碼對照表的唯一性與格式，以及國旗由區域指示符號推導
+- 區域代碼對照表的唯一性與格式，以及「介面不得再冒出國旗」的回歸測試
 - 地理編碼上游：Nominatim 與 Photon 兩種回應格式的正規化（含 GeoJSON 經緯度順序）、查詢快取、節流與排隊上限、上游失敗的錯誤對應
 - 草稿的擁有權（非擁有者一律 404）、圖片的保留／替換／清空三種語意、發佈時沿用草稿照片與孤兒檔案回收
 
@@ -188,11 +188,15 @@ curl http://localhost:3000/api/health
 
 ## 地圖架構與 OpenStreetMap 使用方式
 
-`components/RegionMap.vue` 是可重用的地圖渲染元件（外層以 `<ClientOnly>` 包住），使用 Leaflet 顯示 OpenStreetMap Standard tiles，並直接以每則旅箋的經緯度建立頭像 Marker。預設視野是**世界**且刻意不設 `maxBounds` —— 把地圖鎖在單一國家，就等於把海外旅箋鎖在畫面外。
+`components/RegionMap.vue` 是可重用的地圖渲染元件（外層以 `<ClientOnly>` 包住），使用 Leaflet 顯示 OpenStreetMap Standard tiles，並直接以每則旅箋的經緯度建立頭像 Marker。預設視野是**世界**且刻意不設 `maxBounds` —— 把地圖鎖在單一區域，就等於把海外旅箋鎖在畫面外。
 
 傳入 `fit-to-checkins` 時，元件會依目前顯示的旅箋自動框出可視範圍（單一旅箋時以 `maxZoom: 13` 收斂，保留「在世界的哪裡」的脈絡），只有在旅箋集合本身改變（初次載入、切換篩選）時才重新框，不會在使用者拖曳地圖時把鏡頭拉走。仍然可以用 `region` 參數指定固定的 `center`／`zoom`／`bounds`。
 
-座標驗證放寬到整顆地球（緯度 ±90、經度 ±180）；國家以 ISO 3166-1 alpha-2 代碼儲存，顯示名稱一律由 `utils/countries.ts` 推導，同一個國家不會因為來源不同而在篩選器裡分裂成好幾項。
+座標驗證放寬到整顆地球（緯度 ±90、經度 ±180）；地點的上層歸屬以 ISO 3166-1 alpha-2 代碼儲存，顯示名稱一律由 `utils/countries.ts` 推導，同一個地方不會因為來源不同而在篩選器裡分裂成好幾項。
+
+### 介面用「區域」，不用「國家」
+
+**畫面上一律稱之為「區域」，而且不顯示國旗。** 這個站要記錄的是「旅伴去過哪裡」，把地點歸類到主權實體不是它的工作，而任何一種歸類方式都會踩到某些人的政治立場；國旗又是其中最強烈的符號。資料層沿用 ISO 3166-1 的欄位名稱（`countryCode`／`country_code`）是因為那就是這份標準的名字，換掉只會讓人看不懂資料從哪來 —— 使用者看到的字串則統一由 `regionName()` 產生。兩層的用詞固定為「區域」（上層）與「行政區」（次級，例如縣市、都道府縣、州）。
 
 ### 景點搜尋與反向地理編碼
 
@@ -232,7 +236,7 @@ curl http://localhost:3000/api/health
 | `PUT` | `/api/drafts/:id` | 更新草稿；未帶新檔案＝保留原圖，`clearPhoto=1`／`clearAvatar=1` 才清空 |
 | `DELETE` | `/api/drafts/:id` | 刪除草稿與其圖片 |
 | `GET` | `/api/geo/search?q=` | 景點搜尋（登入後可用，伺服器代打 Nominatim） |
-| `GET` | `/api/geo/reverse?lat=&lon=` | 座標反查國家與行政區 |
+| `GET` | `/api/geo/reverse?lat=&lon=` | 座標反查區域與行政區 |
 | `GET` | `/api/admin/overview` | 管理員會員與旅箋資料 |
 | `DELETE` | `/api/admin/checkins/:id` | 管理員刪除旅箋 |
 | `GET` | `/uploads/:file` | 讀取已驗證圖片 |

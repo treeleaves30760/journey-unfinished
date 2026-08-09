@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto'
 import { createError } from 'h3'
 import { DEFAULT_COUNTRY_CODE, isCountryCode } from '../../utils/countries'
 
-// 臺灣縣市的列舉已經移除：全球化之後「地區」欄位可能是任何國家的行政區，
+// 臺灣縣市的列舉已經移除：全球化之後「行政區」欄位可能是任何區域底下的行政區，
 // 伺服器端改成長度與內容衛生檢查（見 validateCheckin 的 county）。
-// 前端在國家選到臺灣時仍會提供這份清單當 datalist 建議值，那一份住在 composables/useCheckins.ts。
+// 前端在區域選到臺灣時仍會提供這份清單當 datalist 建議值，那一份住在 composables/useCheckins.ts。
 
 export const AVATARS = ['sun', 'leaf', 'berry', 'ocean', 'cloud', 'peach'] as const
 
@@ -15,11 +15,12 @@ export const MAX_MESSAGE_LENGTH = 2_000
 export interface CheckinInput {
   nickname: string
   location: string
-  // 國家／地區的 ISO 3166-1 alpha-2 代碼。顯示名稱一律由 utils/countries.ts 推導，
-  // 不存自由文字，同一個國家才不會因為來源不同而在篩選器裡分裂成好幾項。
+  // ISO 3166-1 alpha-2 代碼。介面上稱之為「區域」而不是「國家」（見 utils/countries.ts
+  // 的檔頭說明）；欄位沿用標準本身的名字。顯示名稱一律由那份表推導，不存自由文字，
+  // 同一個區域才不會因為來源不同而在篩選器裡分裂成好幾項。
   countryCode: string
   // 次級行政區（臺灣是縣市、日本是都道府縣、法國是大區）。全球化之後不再是列舉，
-  // 因為世界上沒有一份「所有國家的一級行政區」清單值得塞進這個專案；改成走與其他
+  // 因為世界上沒有一份「所有區域的一級行政區」清單值得塞進這個專案；改成走與其他
   // 自由文字相同的衛生檢查。欄位名稱維持 county 是為了不動資料庫與既有 API 形狀。
   county: string
   latitude: number
@@ -52,7 +53,7 @@ function numberInRange(value: unknown, label: string, min: number, max: number) 
 function validateCountryCode(value: unknown) {
   const code = String(value ?? DEFAULT_COUNTRY_CODE).trim().toUpperCase()
   if (!isCountryCode(code)) {
-    throw createError({ statusCode: 400, message: '請選擇有效的國家／地區' })
+    throw createError({ statusCode: 400, message: '請選擇有效的區域' })
   }
   return code
 }
@@ -88,7 +89,7 @@ export function validateCheckin(fields: Record<string, unknown>): CheckinInput {
     nickname: safeText(fields.nickname, '暱稱', 1, 30, { multiline: false, maxLinks: 0 }),
     location: safeText(fields.location, '地點', 2, 80, { multiline: false, maxLinks: 0 }),
     countryCode: validateCountryCode(fields.countryCode),
-    county: safeText(fields.county, '地區', 1, 40, { multiline: false, maxLinks: 0 }),
+    county: safeText(fields.county, '行政區', 1, 40, { multiline: false, maxLinks: 0 }),
     // 全球座標：緯度 ±90、經度 ±180 就是地球的全部範圍，不再限制在臺灣本島與離島。
     latitude: numberInRange(fields.latitude, '緯度', -90, 90),
     longitude: numberInRange(fields.longitude, '經度', -180, 180),
@@ -135,7 +136,7 @@ export function validateDraft(fields: Record<string, unknown>): DraftInput {
     nickname: optionalSafeText(fields.nickname, '暱稱', 30, { multiline: false, maxLinks: 0 }),
     location: optionalSafeText(fields.location, '地點', 80, { multiline: false, maxLinks: 0 }),
     countryCode: countryCodeRaw ? validateCountryCode(countryCodeRaw) : null,
-    county: optionalSafeText(fields.county, '地區', 40, { multiline: false, maxLinks: 0 }),
+    county: optionalSafeText(fields.county, '行政區', 40, { multiline: false, maxLinks: 0 }),
     latitude: optionalNumberInRange(fields.latitude, '緯度', -90, 90),
     longitude: optionalNumberInRange(fields.longitude, '經度', -180, 180),
     dollName: optionalSafeText(fields.dollName, '娃娃名稱', 40, { multiline: false, maxLinks: 0 }),

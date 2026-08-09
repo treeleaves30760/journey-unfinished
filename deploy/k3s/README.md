@@ -193,7 +193,7 @@ Photon 的索引本來就是拿 Nominatim 的資料建出來的，資料來源�
 **唯一實質的取捨是中文名稱**：這裡一律用 `lang=default`，也就是 OSM 的 `name` 標籤
 （當地語言）—— 臺灣是中文、日本是日文、冰島是冰島文。對旅遊紀錄來說看到的就是招牌上的
 名字，通常反而更貼近現場；「行政區」欄位會變成當地語言，使用者可以在表單裡自己改。
-國家名稱不受影響，那是應用自己依國碼推導的。
+區域名稱不受影響，那是應用自己依代碼推導的。
 
 ### 步驟
 
@@ -217,6 +217,34 @@ Photon 的索引本來就是拿 Nominatim 的資料建出來的，資料來源�
 要退回公用服務：把 `deploy.env` 那兩行改回 `nominatim` 與公用網址，重跑 `deploy.sh` 即可，
 Photon 可以先留著不動。要連 Photon 一起移除：`kubectl delete namespace geocoder`
 （**會一併刪掉 PVC 與那 95 GB 的索引**）。
+
+### 索引要放哪個磁碟
+
+**放 NVMe（也就是 local-path 的預設位置），不要放大容量的 HDD 池。** Photon 底層是
+Lucene：查詢會做大量的小型隨機讀取。RAIDZ 的隨機讀 IOPS 大約只等於「每個 vdev 一顆碟」，
+把索引放在旋轉碟組成的 RAIDZ 上，只要沒命中快取就會慢得很明顯。95 GB 的索引對一顆
+1 TB 的 NVMe 來說綽綽有餘，而且那正是 k3s local-path 預設寫入的地方 —— 不必做任何設定。
+
+大容量池請留給它擅長的事：備份（`~/journey-backups/`）、快照與冷資料。
+
+若真的必須放在 ZFS 上，至少要替那個 dataset 調三件事，預設值對搜尋索引都是錯的：
+
+```bash
+zfs create -o recordsize=16K -o compression=lz4 -o atime=off <pool>/photon
+```
+
+`recordsize` 預設 128K 會讓每次小型隨機讀都放大成 128K；`atime=on` 會讓每一次讀都產生
+一次寫入。`primarycache` 維持 `all` —— Photon 不像資料庫那樣自己在 heap 裡快取資料，
+它靠的就是作業系統的快取，設成 `metadata` 等於把它唯一的快取拿掉。
+
+### JVM 堆疊不要開大
+
+直覺會想「機器有很多記憶體，就把 heap 開到幾十 GB」，但對 Photon 這是反效果。Lucene 刻意
+把索引放在 heap 之外的 mmap 檔案裡，靠作業系統的 page cache 提供，**heap 開大並不會快取到
+索引資料，只會把原本能拿來當快取的記憶體吃掉，順便讓 GC 停頓變長**。上游文件寫的
+「建議 64 GB」指的是「系統可用來快取的記憶體」，不是 heap。
+
+`PHOTON_HEAP` 預設 `4g`，一般情況不需要動；真的要調，8g 大概就是上限。
 
 ### 幾個容易踩到的點
 
