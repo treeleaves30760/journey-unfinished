@@ -124,12 +124,20 @@ useHead({ title: '快速記錄｜未完旅箋' })
 
       <section class="quick-step">
         <h2><span>01</span>拍下這一刻</h2>
+        <!--
+          相機與相簿必須是兩個各自獨立的 input。`capture` 不是「預設先開相機」的提示，
+          而是「這個 input 只從相機拿檔案」的指定：Android Chrome 看到它會直接叫起相機，
+          使用者沒有任何機會切到相簿。所以想同時支援兩種來源，就得給相簿自己的入口。
+        -->
         <label class="upload-drop quick-capture" :class="{ 'has-preview': photoPreview, 'has-error': photoError }">
-          <!-- capture 讓手機直接開相機，而不是先跳進相簿再找檔案 -->
           <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" @change="choosePhoto">
           <img v-if="photoPreview" :src="photoPreview" alt="剛拍下的照片預覽">
-          <span v-if="photoPreview" class="upload-change">重拍或換一張</span>
-          <template v-else><span class="upload-icon">▣</span><strong>開啟相機</strong><small>也可以從相簿挑一張</small></template>
+          <span v-if="photoPreview" class="upload-change">重拍一張</span>
+          <template v-else><span class="upload-icon">▣</span><strong>開啟相機</strong><small>拍下眼前的風景</small></template>
+        </label>
+        <label class="photo-source-alt">
+          <input type="file" accept="image/jpeg,image/png,image/webp" @change="choosePhoto">
+          <span aria-hidden="true">▤</span>{{ photoPreview ? '改從相簿挑一張' : '從相簿挑一張' }}
         </label>
         <p v-if="photoError" class="field-error" role="alert">{{ photoError }}</p>
       </section>

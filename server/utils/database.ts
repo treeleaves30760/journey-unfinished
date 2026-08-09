@@ -332,6 +332,19 @@ export function listCheckins(): Checkin[] {
   return getDatabase().prepare(`${baseSelect} GROUP BY c.id ORDER BY c.visited_at DESC, c.id DESC`).all() as Checkin[]
 }
 
+/**
+ * 個人管理區與匯出用的「我的旅箋」。
+ *
+ * 這裡刻意用 SQL 的 `c.user_id = ?` 過濾，而不是讓前端拿 listCheckins() 再自己比對——
+ * 種子資料與早期旅箋的 user_id 是 NULL，SQL 的 NULL 比較永遠不成立，正好是我們要的語意
+ * （無主旅箋不屬於任何人）；換成 JavaScript 的 == 就會有機會把它們算成某個人的。
+ */
+export function listCheckinsByUser(userId: number): Checkin[] {
+  return getDatabase().prepare(
+    `${baseSelect} WHERE c.user_id = ? GROUP BY c.id ORDER BY c.visited_at DESC, c.id DESC`
+  ).all(userId) as Checkin[]
+}
+
 export function findCheckin(id: number): Checkin | undefined {
   return getDatabase().prepare(`${baseSelect} WHERE c.id = ? GROUP BY c.id`).get(id) as Checkin | undefined
 }

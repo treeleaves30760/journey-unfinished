@@ -56,9 +56,10 @@ useHead({ title: '我的草稿｜未完旅箋' })
       <div class="form-intro-links">
         <NuxtLink class="text-link" to="/checkins/quick"><span aria-hidden="true">⚡</span> 快速記錄新地點</NuxtLink>
         <NuxtLink class="text-link" to="/checkins/new"><span aria-hidden="true">✎</span> 寫完整旅箋</NuxtLink>
-        <NuxtLink class="text-link" to="/dolls"><span aria-hidden="true">◍</span> 我的娃娃</NuxtLink>
       </div>
     </section>
+
+    <AccountNav current="drafts" />
 
     <div v-if="actionError" class="alert error-alert" role="alert"><strong>操作失敗</strong><span>{{ actionError }}</span></div>
 

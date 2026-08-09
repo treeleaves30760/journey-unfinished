@@ -2,7 +2,7 @@
 
 > 小小的你，世界很大。
 
-一個讓使用者分享「帶著 Gal-Game／原創收藏娃娃去旅行」照片與故事的互動紀錄網站。地圖涵蓋全球，會依旅箋分佈自動框出視野；使用者可搜尋景點或在地圖上點選標記地點、上傳照片、以 Markdown 寫下心得、選擇預設頭像或從照片裁切頭像，並在旅箋下留言。出門在外可以用手機先拍照存成草稿，回家再用電腦把故事寫完。
+一個讓使用者分享「帶著 Gal-Game／原創收藏娃娃去旅行」照片與故事的互動紀錄網站。地圖涵蓋全球，會依旅箋分佈自動框出視野；使用者可搜尋景點或在地圖上點選標記地點、上傳照片、以 Markdown 寫下心得、從照片裁切娃娃頭像，並在旅箋下留言。出門在外可以用手機先拍照存成草稿，回家再用電腦把故事寫完；寫下的紀錄可以在個人管理區整理，也能整份匯出帶走。
 
 > 專案內只使用通用、原創的娃娃示意設計，不包含任何未授權遊戲角色素材。
 
@@ -17,9 +17,12 @@
 - **旅途留言支援 Markdown**，編輯器附工具列、即時預覽與桌機並排模式
 - **娃娃檔案**：名稱、作品出處與頭像存一次，寫旅箋時直接選；選擇器預設選「上次用的」那一隻，暱稱也會帶入上一則旅箋填的值
 - **草稿**：手機上拍完照、標好地點就先存著，換到電腦登入同一個帳號接著寫完再發佈
-- **手機快速記錄**（`/checkins/quick`）：拍照 → 標位置 → 存草稿，三步收工；長表單另有黏底操作列
-- 6 種通用預設頭像，或在瀏覽器以 Canvas 裁切照片區塊作為頭像
+- **手機快速記錄**（`/checkins/quick`）：拍照 → 標位置 → 存草稿，三步收工；相機與相簿是兩個各自獨立的入口（帶 `capture` 的 input 在手機上只叫得動相機），長表單另有黏底操作列
+- 在瀏覽器以 Canvas 裁切照片區塊作為娃娃頭像
 - 旅箋詳情與訪客留言（匿名，含內容衛生檢查與分層限流）
+- **照片可點開放大檢視**：版面上的照片是裁切結果，全螢幕檢視才看得到完整構圖（Esc／點背景關閉，焦點會還回原處）
+- **個人管理區**（`/me`）：自己寫過的旅箋一次列出，可搜尋、勾選、單筆或批次刪除，不必為了刪一則而點進詳情頁；與「我的娃娃」「我的草稿」共用同一列分頁
+- **匯出個人打卡紀錄**：CSV（試算表）、JSON（完整備份）、GeoJSON（丟進地圖工具）
 - 作者可自行刪除自己的旅箋，照片一併移除
 - 管理中心：會員列表、旅箋檢視與管理員刪除、區域／行政區分布統計
 - Nitro API + SQLite 持久化
@@ -66,13 +69,13 @@
 
 ```text
 app.vue                    Nuxt 應用外框
-pages/                     首頁、探索地圖、登入、建立旅箋、手機快速記錄、草稿、娃娃檔案、旅箋詳情、管理中心
+pages/                     首頁、探索地圖、登入、建立旅箋、手機快速記錄、個人管理區、草稿、娃娃檔案、旅箋詳情、管理中心
 middleware/                會員與管理員頁面守衛
-components/                RegionMap、LocationPicker、MarkdownEditor／MarkdownView、卡片、頭像裁切等元件
+components/                RegionMap、LocationPicker、MarkdownEditor／MarkdownView、PhotoLightbox、AccountNav、卡片、頭像裁切等元件
 composables/               useAuth、useCheckins 等前端共用邏輯
-utils/                     前後端共用工具（安全回跳路徑、區域代碼對照、Markdown 解析）
+utils/                     前後端共用工具（安全回跳路徑、區域代碼對照、Markdown 解析、匯出格式）
 assets/css/main.css        全站視覺與響應式樣式
-server/api/                Nitro JSON / multipart API（旅箋、留言、草稿、地理編碼、管理）
+server/api/                Nitro JSON / multipart API（旅箋、留言、草稿、娃娃、個人管理、地理編碼、管理）
 server/routes/uploads/     上傳圖片讀取路由
 server/utils/              SQLite、驗證、上傳、草稿、地理編碼、請求安全與 Discord 工具
 data/                      SQLite 與上傳圖片（執行時產生）
@@ -165,7 +168,7 @@ npm run build
 npm run start
 ```
 
-單元測試目前有 **30 個檔案、524 個案例**，涵蓋：
+單元測試目前有 **33 個檔案、569 個案例**，涵蓋：
 
 - OAuth URL／code exchange／state、Session Cookie 與撤銷、管理員白名單、安全回跳路徑
 - SQLite fresh schema 與 legacy migration、foreign-key cascade、建立者綁定、檔案刪除
@@ -180,6 +183,8 @@ npm run start
 - 地理編碼上游：Nominatim 與 Photon 兩種回應格式的正規化（含 GeoJSON 經緯度順序）、查詢快取、節流與排隊上限、上游失敗的錯誤對應
 - 草稿的擁有權（非擁有者一律 404）、圖片的保留／替換／清空三種語意、發佈時沿用草稿照片與孤兒檔案回收
 - 娃娃檔案的擁有權與數量上限、頭像副本的歸屬（刪除旅箋不會弄壞娃娃檔案）、「記住上次用的」排序，以及刪除檔案後既有旅箋仍保有自己的名稱與頭像
+- 個人管理區：`/api/me/checkins` 只回自己的（他人的與 `user_id` 為 NULL 的無主旅箋都不算），批次刪除的擁有權矩陣、混入他人 id 時整批回滾、CSRF 與限流
+- 匯出格式：CSV 的引號跳脫、多行留言壓平、**以 `=`／`+`／`-`／`@` 開頭的內容補上單引號**（CSV injection），以及 GeoJSON 的 `[經度, 緯度]` 座標順序
 
 E2E 另涵蓋頁面權限與 320px 到桌面、矮螢幕的滿版 snap 幾何。Playwright 每次會建立獨立暫存資料庫與 uploads 目錄，結束後自動移除，不會污染開發資料。
 
@@ -233,6 +238,8 @@ curl http://localhost:3000/api/health
 | `GET` | `/api/checkins/:id` | 旅箋與留言詳情 |
 | `DELETE` | `/api/checkins/:id` | 作者刪除自己的旅箋（管理員亦可） |
 | `POST` | `/api/checkins/:id/comments` | 建立留言（匿名） |
+| `GET` | `/api/me/checkins` | 自己寫下的旅箋（個人管理區與匯出的資料來源） |
+| `DELETE` | `/api/me/checkins` | 刪除自己的旅箋，可一次多則；混進他人旅箋整批拒絕，管理員在這裡也只刪得到自己的 |
 | `GET` | `/api/dolls` | 自己的娃娃檔案 + 上一則旅箋的暱稱（表單的預設值來源） |
 | `POST` | `/api/dolls` | 建立娃娃檔案（multipart，頭像選填） |
 | `PUT` | `/api/dolls/:id` | 更新；未帶新檔＝保留原頭像，`clearAvatar=1` 才清空 |

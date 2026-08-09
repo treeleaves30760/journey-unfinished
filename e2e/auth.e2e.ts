@@ -27,11 +27,16 @@ test.beforeEach(async () => {
 test('page middleware separates anonymous, member and admin access', async ({ browser, page }) => {
   await page.goto('/checkins/new')
   await expect(page).toHaveURL(url => url.pathname === '/login' && url.searchParams.get('redirect') === '/checkins/new')
+  // 個人管理區列的是「自己寫過什麼」，未登入時不該有任何一頁看得到它
+  await page.goto('/me')
+  await expect(page).toHaveURL(url => url.pathname === '/login' && url.searchParams.get('redirect') === '/me')
 
   const member = await authenticatedContext(browser, 'member')
   const memberPage = await member.newPage()
   await memberPage.goto('/checkins/new')
   await expect(memberPage).toHaveURL(/\/checkins\/new$/)
+  await memberPage.goto('/me')
+  await expect(memberPage).toHaveURL(/\/me$/)
   await memberPage.goto('/admin')
   await expect(memberPage).toHaveURL(`${baseURL}/`)
   await member.close()
