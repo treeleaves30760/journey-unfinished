@@ -54,6 +54,11 @@ export interface CheckinComment {
   createdAt: string
 }
 
+/**
+ * 六種內建頭像。**已經不再提供選擇**——娃娃的頭像一律是使用者上傳照片裁出來的那張，
+ * 這份清單只剩下算繪既有資料的用途：資料庫裡（示範資料與早期寫下的旅箋）仍存著
+ * leaf／ocean 之類的值，刪掉這份對照表會讓那些旅箋的頭像一起變樣。
+ */
 export const avatarChoices = [
   { id: 'sun', label: '暖陽', face: '☀' },
   { id: 'leaf', label: '森芽', face: '♣' },

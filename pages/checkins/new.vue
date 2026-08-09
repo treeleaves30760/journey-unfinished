@@ -20,6 +20,9 @@ const form = reactive({
   dollId: null as number | null,
   nickname: '', location: '', countryCode: DEFAULT_COUNTRY_CODE, county: '',
   latitude: null as number | null, longitude: null as number | null,
+  // avatarPreset 已經沒有選擇器（頭像一律用上傳裁切的那張），但欄位保留：
+  // 舊資料與舊娃娃檔案裡存著 leaf／ocean 之類的值，選到那些娃娃時要原樣帶回去，
+  // 才不會因為送出 'sun' 而把它們既有的預設頭像默默改掉。
   dollName: '', series: '', message: '', visitedAt: today, avatarPreset: 'sun'
 })
 const dollPicker = ref<{ lastNickname: string | null } | null>(null)
@@ -33,7 +36,6 @@ const photoPreview = ref<string | null>(null)
 // 使用者不必為了發佈而在電腦上再找一次同一張手機照片。
 const storedPhoto = ref<string | null>(null)
 const avatar = ref<File | null>(null)
-const avatarPreview = ref<string | null>(null)
 const storedAvatar = ref<string | null>(null)
 // 使用者按下「移除自訂頭像」而草稿裡本來有一張時，要明確告訴伺服器「清掉」，
 // 否則發佈時會沿用草稿那張，畫面上明明已經切回預設頭像卻沒有生效。
@@ -89,7 +91,6 @@ function applyDoll(doll: Doll | null) {
   // 這一則要用的頭像由伺服器依 dollId 從檔案複製一份，所以這裡只負責預覽
   storedAvatar.value = doll.avatar
   avatar.value = null
-  avatarPreview.value = null
   clearAvatar.value = false
 }
 
@@ -108,9 +109,8 @@ function choosePhoto(event: Event) {
   photoPreview.value = file ? URL.createObjectURL(file) : null
 }
 
-function setAvatar(file: File | null, preview: string | null) {
+function setAvatar(file: File | null) {
   avatar.value = file
-  avatarPreview.value = preview
   if (file) {
     storedAvatar.value = null
     clearAvatar.value = false
@@ -259,15 +259,6 @@ useHead({ title: '寫下這一站｜未完旅箋' })
             <label class="field"><span>娃娃名稱 <b>*</b></span><input v-model.trim="form.dollName" required maxlength="40" placeholder="例如：暖暖"></label>
           </div>
           <label class="field"><span>作品出處 <small>原創娃娃可以留空</small></span><input v-model.trim="form.series" maxlength="60" placeholder="這隻娃娃出自哪部作品？"></label>
-          <fieldset class="avatar-fieldset">
-            <legend>選擇原創頭像 <small>上傳自訂頭像後會優先顯示</small></legend>
-            <div class="avatar-options">
-              <label v-for="choice in avatarChoices" :key="choice.id" :class="{ checked: form.avatarPreset === choice.id && !avatarPreview && !storedAvatar }">
-                <input v-model="form.avatarPreset" type="radio" :value="choice.id">
-                <DollAvatar :preset="choice.id" :alt="choice.label" size="medium" /><small>{{ choice.label }}</small>
-              </label>
-            </div>
-          </fieldset>
           <AvatarCropper @change="setAvatar" />
         </section>
 
@@ -307,7 +298,18 @@ useHead({ title: '寫下這一站｜未完旅箋' })
         </section>
 
         <section class="form-card">
-          <div class="form-card-heading"><span>03</span><div><h2>旅途故事</h2><p>用文字和照片收藏當下的心情。</p></div></div>
+          <div class="form-card-heading"><span>03</span><div><h2>旅途故事</h2><p>先放上照片，再對著它把心情寫下來。</p></div></div>
+          <!-- 照片排在留言前面：寫的人是看著照片回想當下的，先選圖再寫字比較接近實際的順序 -->
+          <div class="field"><span>旅途照片 <b>*</b></span>
+            <label class="upload-drop" :class="{ 'has-preview': previewSrc, 'has-error': photoError }">
+              <input id="travel-photo" ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" :required="!hasPhoto" :aria-invalid="Boolean(photoError)" aria-describedby="travel-photo-help" @change="choosePhoto">
+              <img v-if="previewSrc" :src="previewSrc" alt="旅途照片預覽">
+              <span v-if="previewSrc" class="upload-change">更換照片</span>
+              <template v-else><span class="upload-icon">▧</span><strong>點擊選擇照片</strong><small id="travel-photo-help">JPEG、PNG 或 WebP，最多 5MB</small></template>
+            </label>
+            <p v-if="photoError" class="field-error" role="alert">{{ photoError }}</p>
+            <p v-else-if="storedPhoto && !photo" class="field-note">目前使用草稿裡的照片，不換也可以直接發佈。</p>
+          </div>
           <label class="field"><span>抵達日期 <b>*</b></span><input v-model="form.visitedAt" type="date" required :max="today"></label>
           <div class="field">
             <label :for="'travel-message'"><span>旅途留言 <b>*</b></span></label>
@@ -319,16 +321,6 @@ useHead({ title: '寫下這一站｜未完旅箋' })
               :rows="10"
               placeholder="今天和娃娃看見了什麼風景？有什麼想記住的片刻？"
             />
-          </div>
-          <div class="field"><span>旅途照片 <b>*</b></span>
-            <label class="upload-drop" :class="{ 'has-preview': previewSrc, 'has-error': photoError }">
-              <input id="travel-photo" ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" :required="!hasPhoto" :aria-invalid="Boolean(photoError)" aria-describedby="travel-photo-help" @change="choosePhoto">
-              <img v-if="previewSrc" :src="previewSrc" alt="旅途照片預覽">
-              <span v-if="previewSrc" class="upload-change">更換照片</span>
-              <template v-else><span class="upload-icon">▧</span><strong>點擊選擇照片</strong><small id="travel-photo-help">JPEG、PNG 或 WebP，最多 5MB</small></template>
-            </label>
-            <p v-if="photoError" class="field-error" role="alert">{{ photoError }}</p>
-            <p v-else-if="storedPhoto && !photo" class="field-note">目前使用草稿裡的照片，不換也可以直接發佈。</p>
           </div>
         </section>
 
@@ -348,7 +340,7 @@ useHead({ title: '寫下這一站｜未完旅箋' })
         <ol class="progress-list">
           <li :class="{ complete: stepCompletion[0] }"><span>1</span><div><strong>旅人與娃娃</strong><small>暱稱、娃娃名稱與頭像</small></div></li>
           <li :class="{ complete: stepCompletion[1] }"><span>2</span><div><strong>旅行地點</strong><small>景點、區域行政區與座標</small></div></li>
-          <li :class="{ complete: stepCompletion[2] }"><span>3</span><div><strong>旅途故事</strong><small>日期、留言與一張照片</small></div></li>
+          <li :class="{ complete: stepCompletion[2] }"><span>3</span><div><strong>旅途故事</strong><small>一張照片、日期與留言</small></div></li>
         </ol>
         <div class="privacy-note"><strong>公開分享前請留意</strong><p>照片與精確座標會公開顯示，請避開住家、個資、車牌或未經同意的人臉。</p></div>
       </aside>

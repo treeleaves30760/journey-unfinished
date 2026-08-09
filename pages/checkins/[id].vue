@@ -12,6 +12,7 @@ const commentError = ref('')
 const createdNotice = ref(route.query.created === '1')
 const deleting = ref(false)
 const deleteError = ref('')
+const zoomed = ref(false)
 
 // 與伺服器端 assertCheckinDeletable 同一條規則：管理員，或 user_id 確實等於自己的擁有者。
 // 種子資料的 userId 是 null，這裡不能讓 null 和任何值比較成功。
@@ -72,7 +73,18 @@ useHead(() => ({
       <NuxtLink class="back-link" to="/">← 回到探索地圖</NuxtLink>
       <article class="detail-story">
         <div class="detail-photo" :class="`scene-${(data.checkin.id % 6) + 1}`">
-          <img v-if="data.checkin.photo" :src="data.checkin.photo" :alt="`${data.checkin.dollName}在${data.checkin.location}的旅途照片`">
+          <!-- 版面上的照片是裁切過的，所以放大的入口本身就是那張照片。用 button 包住而不是
+               在 img 上掛 @click：鍵盤與螢幕閱讀器要有一個真的「可以按」的東西才找得到它。 -->
+          <button
+            v-if="data.checkin.photo"
+            class="detail-photo-zoom"
+            type="button"
+            :aria-label="`放大檢視${data.checkin.location}的照片`"
+            @click="zoomed = true"
+          >
+            <img :src="data.checkin.photo" :alt="`${data.checkin.dollName}在${data.checkin.location}的旅途照片`">
+            <span class="detail-photo-hint" aria-hidden="true">⤢ 點一下看完整照片</span>
+          </button>
           <div v-else class="placeholder-scene large" aria-hidden="true"><i class="sun-or-moon" /><i class="hill far" /><i class="hill near" /><span>JOURNEY<br>NOTES</span></div>
           <span class="photo-tape left" /><span class="photo-tape right" />
         </div>
@@ -111,6 +123,15 @@ useHead(() => ({
           </form>
         </div>
       </section>
+
+      <PhotoLightbox
+        v-if="data.checkin.photo"
+        :open="zoomed"
+        :src="data.checkin.photo"
+        :alt="`${data.checkin.dollName}在${data.checkin.location}的旅途照片`"
+        :caption="`${placeLabel(data.checkin)}・${data.checkin.location}`"
+        @close="zoomed = false"
+      />
     </template>
   </main>
 </template>

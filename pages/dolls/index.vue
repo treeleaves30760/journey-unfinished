@@ -13,9 +13,10 @@ const removingId = ref<number | null>(null)
 const formError = ref('')
 const listError = ref('')
 
+// avatarPreset 已經沒有選擇器（頭像一律用上傳裁切的那張），但欄位保留：
+// 舊檔案裡存著 leaf／ocean 之類的值，編輯時要原樣送回去，才不會默默改掉既有的預設頭像。
 const form = reactive({ name: '', series: '', avatarPreset: 'sun' })
 const avatar = ref<File | null>(null)
-const avatarPreview = ref<string | null>(null)
 const storedAvatar = ref<string | null>(null)
 // 使用者按了「移除自訂頭像」而檔案裡本來有一張時，要明確告訴伺服器清空 ——
 // 不然更新會沿用原圖，畫面上明明已經切回預設頭像卻沒有生效。
@@ -31,7 +32,6 @@ function resetForm() {
   form.series = ''
   form.avatarPreset = 'sun'
   avatar.value = null
-  avatarPreview.value = null
   storedAvatar.value = null
   clearAvatar.value = false
   formError.value = ''
@@ -60,9 +60,8 @@ function close() {
   resetForm()
 }
 
-function setAvatar(file: File | null, preview: string | null) {
+function setAvatar(file: File | null) {
   avatar.value = file
-  avatarPreview.value = preview
   if (file) {
     storedAvatar.value = null
     clearAvatar.value = false
@@ -132,6 +131,8 @@ useHead({ title: '我的娃娃｜未完旅箋' })
       </div>
     </section>
 
+    <AccountNav current="dolls" />
+
     <div v-if="listError" class="alert error-alert" role="alert"><strong>操作失敗</strong><span>{{ listError }}</span></div>
 
     <div v-if="status === 'pending'" class="state-panel" role="status"><i class="loader" />正在點名旅伴…</div>
@@ -146,21 +147,12 @@ useHead({ title: '我的娃娃｜未完旅箋' })
       </div>
 
       <section v-if="isOpen" class="form-card doll-form">
-        <div class="form-card-heading"><span>{{ editingId ? '✎' : '＋' }}</span><div><h2>{{ editingId ? '編輯娃娃' : '新增娃娃' }}</h2><p>頭像可以挑現成的，或上傳照片裁一張。</p></div></div>
+        <div class="form-card-heading"><span>{{ editingId ? '✎' : '＋' }}</span><div><h2>{{ editingId ? '編輯娃娃' : '新增娃娃' }}</h2><p>上傳一張娃娃的照片，裁成方形就是它的頭像。</p></div></div>
         <div v-if="formError" class="field-error" role="alert">{{ formError }}</div>
         <div class="field-grid two">
           <label class="field"><span>娃娃名稱 <b>*</b></span><input v-model.trim="form.name" required maxlength="40" placeholder="例如：暖暖"></label>
           <label class="field"><span>作品出處 <small>原創娃娃可以留空</small></span><input v-model.trim="form.series" maxlength="60" placeholder="這隻娃娃出自哪部作品？"></label>
         </div>
-        <fieldset class="avatar-fieldset">
-          <legend>選擇原創頭像 <small>上傳自訂頭像後會優先顯示</small></legend>
-          <div class="avatar-options">
-            <label v-for="choice in avatarChoices" :key="choice.id" :class="{ checked: form.avatarPreset === choice.id && !avatarPreview && !storedAvatar }">
-              <input v-model="form.avatarPreset" type="radio" :value="choice.id">
-              <DollAvatar :preset="choice.id" :alt="choice.label" size="medium" /><small>{{ choice.label }}</small>
-            </label>
-          </div>
-        </fieldset>
         <div v-if="storedAvatar" class="doll-current-avatar">
           <DollAvatar :src="storedAvatar" :preset="form.avatarPreset" alt="目前的自訂頭像" size="large" />
           <span>目前使用這張自訂頭像。重新上傳或按「移除自訂頭像」可以換掉。</span>
