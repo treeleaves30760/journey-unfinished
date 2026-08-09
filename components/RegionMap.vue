@@ -26,18 +26,23 @@ const props = withDefaults(defineProps<{
   selectedId?: number | null
   region?: RegionView
   focusTarget?: FocusTarget | null
+  /** 依目前的旅箋自動框出可視範圍。旅箋分佈在全球時，固定的中心點與縮放等級沒有意義。 */
+  fitToCheckins?: boolean
 }>(), {
   selectedId: null,
+  // 預設視野是「世界」而不是臺灣：這個站已經收得下任何國家的旅箋，
+  // 也因此刻意不設 maxBounds —— 把地圖鎖在臺灣，就等於把海外旅箋鎖在畫面外。
+  // 沒有任何旅箋時停在臺灣附近純粹是站點的出身地，有旅箋時 fitToCheckins 會立刻蓋過它。
   region: () => ({
-    id: 'taiwan',
-    label: '臺灣',
+    id: 'world',
+    label: '世界',
     center: [23.72, 121.0],
-    zoom: 7,
-    minZoom: 6,
-    maxZoom: 18,
-    bounds: [[20.4, 117.7], [26.9, 123.8]]
+    zoom: 3,
+    minZoom: 2,
+    maxZoom: 19
   }),
-  focusTarget: null
+  focusTarget: null,
+  fitToCheckins: false
 })
 
 const emit = defineEmits<{ select: [checkin: Checkin] }>()
@@ -102,6 +107,23 @@ function applyRegion() {
   map.value.setView(props.region.center, props.region.zoom)
 }
 
+// 目前畫在地圖上的是哪一組旅箋。只有「集合本身改變」（初次載入、切換篩選）才重新框視野；
+// 只是點選某一則、或旅箋內容微幅更新時不動鏡頭，否則使用者剛拖到想看的地方就被拉走。
+let fittedSignature = ''
+
+function fitToCheckins() {
+  if (!props.fitToCheckins || !map.value || !leaflet) return
+  const signature = props.checkins.map(checkin => checkin.id).sort((a, b) => a - b).join(',')
+  if (signature === fittedSignature) return
+  fittedSignature = signature
+  if (!props.checkins.length) return
+
+  const bounds = leaflet.latLngBounds(props.checkins.map(checkin => [checkin.latitude, checkin.longitude] as [number, number]))
+  // maxZoom 擋住「只有一則旅箋」時 fitBounds 會一路衝到街道級距的行為：
+  // 那樣看到的是一整片建築物，完全失去「這則旅箋在世界的哪裡」的脈絡。
+  map.value.fitBounds(bounds, { padding: [48, 48], maxZoom: 13, animate: false })
+}
+
 /**
  * 初始化綁在 template ref 的 watcher 而不是 onMounted。
  *
@@ -130,7 +152,9 @@ async function initMap(element: HTMLElement) {
     maxBounds: props.region.bounds,
     zoomControl: true,
     attributionControl: true,
-    preferCanvas: true
+    preferCanvas: true,
+    // 全球地圖：拖過換日線時圖磚要接得起來，而不是掉進空白的世界邊緣
+    worldCopyJump: true
   })
 
   leaflet.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -139,6 +163,7 @@ async function initMap(element: HTMLElement) {
   }).addTo(map.value)
 
   syncMarkers()
+  fitToCheckins()
   requestAnimationFrame(() => map.value?.invalidateSize())
   resizeObserver = new ResizeObserver(() => map.value?.invalidateSize({ pan: false }))
   resizeObserver.observe(element)
@@ -148,7 +173,10 @@ watch(mapElement, (element) => {
   if (element) initMap(element)
 }, { immediate: true, flush: 'post' })
 
-watch(() => props.checkins, syncMarkers, { deep: true })
+watch(() => props.checkins, () => {
+  syncMarkers()
+  fitToCheckins()
+}, { deep: true })
 watch(() => props.selectedId, () => {
   syncMarkers()
   if (props.selectedId) markers.get(props.selectedId)?.openTooltip()

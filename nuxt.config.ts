@@ -79,6 +79,18 @@ export default defineNuxtConfig({
     discordRedirectUri: '',
     adminDiscordIds: '',
     sessionDays: 30,
+    // 景點搜尋的上游服務。瀏覽器永遠只打自家 /api/geo/*，由伺服器代打上游：
+    // CSP 的 connect-src 因此可以維持 'self'，使用者的 IP 與搜尋關鍵字也不會直接
+    // 送到第三方。設成空字串即關閉搜尋，表單會退回手動輸入座標。
+    geocoderUrl: 'https://nominatim.openstreetmap.org',
+    // 'nominatim'（公用服務，每秒 1 次上限）或 'photon'（自架，無速率上限）。
+    // 兩者的回應格式完全不同，見 server/utils/geocoding.ts。
+    geocoderProvider: 'nominatim',
+    // Nominatim 使用條款建議附上聯絡信箱，被判定濫用時對方會先來信而不是直接封鎖
+    geocoderEmail: '',
+    // 兩次上游請求之間至少間隔幾毫秒。留空＝依 provider 自動決定（Nominatim 1100、
+    // Photon 0）。指到別人架的公用服務時才需要自己填一個值。
+    geocoderMinIntervalMs: '',
     public: {
       appUrl: 'http://localhost:3000'
     }

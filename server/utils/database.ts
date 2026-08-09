@@ -1,7 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
-import type { CheckinInput } from './validation'
+import { DEFAULT_COUNTRY_CODE } from '../../utils/countries'
+import { MAX_MESSAGE_LENGTH, type CheckinInput, type DraftInput } from './validation'
 
 export interface Checkin extends CheckinInput {
   id: number
@@ -10,6 +11,15 @@ export interface Checkin extends CheckinInput {
   avatar: string | null
   createdAt: string
   commentCount: number
+}
+
+export interface Draft extends DraftInput {
+  id: number
+  userId: number
+  photo: string | null
+  avatar: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Comment {
@@ -41,13 +51,44 @@ const userColumns = `id, discord_id AS discordId, username, display_name AS disp
   avatar_url AS avatarUrl, role, created_at AS createdAt, last_login_at AS lastLoginAt`
 
 const baseSelect = `
-  SELECT c.id, c.user_id AS userId, c.nickname, c.location, c.county,
+  SELECT c.id, c.user_id AS userId, c.nickname, c.location,
+    c.country_code AS countryCode, c.county,
     c.latitude, c.longitude, c.doll_name AS dollName, c.series,
     c.message, c.visited_at AS visitedAt,
     c.photo, c.avatar, c.avatar_preset AS avatarPreset,
     c.created_at AS createdAt,
     COUNT(cm.id) AS commentCount
   FROM checkins c LEFT JOIN comments cm ON cm.checkin_id = c.id`
+
+const draftColumns = `id, user_id AS userId, nickname, location, country_code AS countryCode, county,
+  latitude, longitude, doll_name AS dollName, series, message, visited_at AS visitedAt,
+  photo, avatar, avatar_preset AS avatarPreset, created_at AS createdAt, updated_at AS updatedAt`
+
+/**
+ * checkins 的權威定義只有這一份，重建表格時（見 migrateCheckins）沿用同一個字串，
+ * 「新資料庫」與「舊資料庫遷移後」的 schema 因此不可能分岔。
+ * message 的上限與 validation.ts 的 MAX_MESSAGE_LENGTH 綁在一起：兩邊都改才算改完。
+ */
+function checkinsTableSql(tableName: string) {
+  return `CREATE TABLE IF NOT EXISTS ${tableName} (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      nickname TEXT NOT NULL CHECK(length(nickname) BETWEEN 1 AND 30),
+      location TEXT NOT NULL CHECK(length(location) BETWEEN 2 AND 80),
+      country_code TEXT NOT NULL DEFAULT '${DEFAULT_COUNTRY_CODE}' CHECK(length(country_code) = 2),
+      county TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      doll_name TEXT NOT NULL CHECK(length(doll_name) BETWEEN 1 AND 40),
+      series TEXT CHECK(series IS NULL OR length(series) BETWEEN 1 AND 60),
+      message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND ${MAX_MESSAGE_LENGTH}),
+      visited_at TEXT NOT NULL,
+      photo TEXT,
+      avatar TEXT,
+      avatar_preset TEXT NOT NULL DEFAULT 'sun',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`
+}
 
 function seed(db: SQLiteDatabase) {
   const seedMarker = db.prepare("SELECT value FROM app_meta WHERE key = 'demo_seeded'").get() as { value: string } | undefined
@@ -60,17 +101,21 @@ function seed(db: SQLiteDatabase) {
 
   const insert = db.prepare(`
     INSERT INTO checkins
-      (nickname, location, county, latitude, longitude, doll_name, message, visited_at, avatar_preset)
+      (nickname, location, country_code, county, latitude, longitude, doll_name, message, visited_at, avatar_preset)
     VALUES
-      (@nickname, @location, @county, @latitude, @longitude, @dollName, @message, @visitedAt, @avatarPreset)`)
+      (@nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @message, @visitedAt, @avatarPreset)`)
 
+  // 示範資料刻意跨到臺灣以外，讓全新安裝一打開就看得出地圖是全球的，
+  // 而不是要等第一則海外旅箋寫下來才發現支援。留言也順便示範 Markdown 的小標與清單。
   const examples = [
-    { nickname: '小晴', location: '淡水漁人碼頭', county: '新北市', latitude: 25.1826, longitude: 121.4106, dollName: '暖暖', message: '追到一場橘粉色的夕陽，海風把今天吹得很溫柔。', visitedAt: '2025-05-18', avatarPreset: 'sun' },
-    { nickname: '森友', location: '阿里山森林遊樂區', county: '嘉義縣', latitude: 23.5102, longitude: 120.8024, dollName: '芽芽', message: '一起搭小火車穿過霧氣，巨木林像童話的入口。', visitedAt: '2025-04-09', avatarPreset: 'leaf' },
-    { nickname: '海鹽', location: '三仙台', county: '臺東縣', latitude: 23.123, longitude: 121.409, dollName: '藍藍', message: '清晨的浪一層一層發亮，這次也留下最喜歡的合照。', visitedAt: '2025-03-22', avatarPreset: 'ocean' },
-    { nickname: '米粒', location: '日月潭向山', county: '南投縣', latitude: 23.8515, longitude: 120.9021, dollName: '糰子', message: '沿著湖畔散步，雲朵和山都倒映在安靜的水面。', visitedAt: '2025-02-14', avatarPreset: 'cloud' },
-    { nickname: '莓果', location: '高美濕地', county: '臺中市', latitude: 24.3118, longitude: 120.5492, dollName: '莓莓', message: '風車、潮間帶和小小的腳印，都是今天的旅行紀念。', visitedAt: '2025-01-26', avatarPreset: 'berry' },
-    { nickname: '桃桃', location: '旗津彩虹教堂', county: '高雄市', latitude: 22.6101, longitude: 120.2664, dollName: '小桃', message: '南方的陽光正好，和最可愛的旅伴看了整片藍色海岸。', visitedAt: '2024-12-08', avatarPreset: 'peach' }
+    { nickname: '小晴', location: '淡水漁人碼頭', countryCode: 'TW', county: '新北市', latitude: 25.1826, longitude: 121.4106, dollName: '暖暖', message: '追到一場橘粉色的夕陽，海風把今天吹得很溫柔。', visitedAt: '2025-05-18', avatarPreset: 'sun' },
+    { nickname: '森友', location: '阿里山森林遊樂區', countryCode: 'TW', county: '嘉義縣', latitude: 23.5102, longitude: 120.8024, dollName: '芽芽', message: '一起搭小火車穿過霧氣，巨木林像童話的入口。', visitedAt: '2025-04-09', avatarPreset: 'leaf' },
+    { nickname: '海鹽', location: '三仙台', countryCode: 'TW', county: '臺東縣', latitude: 23.123, longitude: 121.409, dollName: '藍藍', message: '清晨的浪一層一層發亮，這次也留下最喜歡的合照。', visitedAt: '2025-03-22', avatarPreset: 'ocean' },
+    { nickname: '米粒', location: '日月潭向山', countryCode: 'TW', county: '南投縣', latitude: 23.8515, longitude: 120.9021, dollName: '糰子', message: '沿著湖畔散步，雲朵和山都倒映在安靜的水面。', visitedAt: '2025-02-14', avatarPreset: 'cloud' },
+    { nickname: '莓果', location: '高美濕地', countryCode: 'TW', county: '臺中市', latitude: 24.3118, longitude: 120.5492, dollName: '莓莓', message: '風車、潮間帶和小小的腳印，都是今天的旅行紀念。', visitedAt: '2025-01-26', avatarPreset: 'berry' },
+    { nickname: '桃桃', location: '旗津彩虹教堂', countryCode: 'TW', county: '高雄市', latitude: 22.6101, longitude: 120.2664, dollName: '小桃', message: '南方的陽光正好，和最可愛的旅伴看了整片藍色海岸。', visitedAt: '2024-12-08', avatarPreset: 'peach' },
+    { nickname: '柚子', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府', latitude: 35.0169, longitude: 135.6716, dollName: '小柚', message: '## 竹林的清晨\n\n六點的竹林還沒有人，只有風。\n\n- 記得帶**廣角鏡**\n- 回程繞去渡月橋\n\n> 下次想在秋天再來一次。', visitedAt: '2025-11-03', avatarPreset: 'leaf' },
+    { nickname: '北緯', location: 'Reynisfjara 黑沙灘', countryCode: 'IS', county: 'Suðurland', latitude: 63.4056, longitude: -19.0448, dollName: '雪球', message: '浪很大、風更大，但玄武岩柱像一整排管風琴。\n\n把旅伴放在石階上拍了整捲底片。', visitedAt: '2025-09-21', avatarPreset: 'ocean' }
   ]
   const transaction = db.transaction(() => {
     let firstId: number | null = null
@@ -115,22 +160,25 @@ export function getDatabase(): SQLiteDatabase {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       last_login_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE TABLE IF NOT EXISTS checkins (
+    ${checkinsTableSql('checkins')};
+    CREATE TABLE IF NOT EXISTS checkin_drafts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      nickname TEXT NOT NULL CHECK(length(nickname) BETWEEN 1 AND 30),
-      location TEXT NOT NULL CHECK(length(location) BETWEEN 2 AND 80),
-      county TEXT NOT NULL,
-      latitude REAL NOT NULL,
-      longitude REAL NOT NULL,
-      doll_name TEXT NOT NULL CHECK(length(doll_name) BETWEEN 1 AND 40),
-      series TEXT CHECK(series IS NULL OR length(series) BETWEEN 1 AND 60),
-      message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 500),
-      visited_at TEXT NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      nickname TEXT CHECK(nickname IS NULL OR length(nickname) <= 30),
+      location TEXT CHECK(location IS NULL OR length(location) <= 80),
+      country_code TEXT CHECK(country_code IS NULL OR length(country_code) = 2),
+      county TEXT CHECK(county IS NULL OR length(county) <= 40),
+      latitude REAL,
+      longitude REAL,
+      doll_name TEXT CHECK(doll_name IS NULL OR length(doll_name) <= 40),
+      series TEXT CHECK(series IS NULL OR length(series) <= 60),
+      message TEXT CHECK(message IS NULL OR length(message) <= ${MAX_MESSAGE_LENGTH}),
+      visited_at TEXT,
       photo TEXT,
       avatar TEXT,
       avatar_preset TEXT NOT NULL DEFAULT 'sun',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS auth_sessions (
       token_hash TEXT PRIMARY KEY,
@@ -148,21 +196,80 @@ export function getDatabase(): SQLiteDatabase {
     CREATE INDEX IF NOT EXISTS idx_comments_checkin ON comments(checkin_id);
   `)
 
-  const checkinColumns = database.prepare('PRAGMA table_info(checkins)').all() as Array<{ name: string }>
-  if (!checkinColumns.some(column => column.name === 'user_id')) {
-    database.exec('ALTER TABLE checkins ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL')
-  }
-  // 舊資料庫沒有這欄，一律補 NULL（等同「原創娃娃／未填寫作品」），不影響既有旅箋的顯示。
-  // CHECK 約束照抄 CREATE TABLE 那份，讓補齊欄位後的舊資料庫和全新建立的資料庫 schema 一致。
-  if (!checkinColumns.some(column => column.name === 'series')) {
-    database.exec('ALTER TABLE checkins ADD COLUMN series TEXT CHECK(series IS NULL OR length(series) BETWEEN 1 AND 60)')
-  }
+  migrateCheckins(database)
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_id);
+    CREATE INDEX IF NOT EXISTS idx_checkin_drafts_user ON checkin_drafts(user_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
   `)
   seed(database)
   return database
+}
+
+/**
+ * 把既有資料庫拉到目前的 checkins schema。索引在這之後才建立，重建表格時被一併刪掉的
+ * 索引因此會自動補回來。
+ */
+function migrateCheckins(db: SQLiteDatabase) {
+  const checkinColumns = db.prepare('PRAGMA table_info(checkins)').all() as Array<{ name: string }>
+  const hasColumn = (name: string) => checkinColumns.some(column => column.name === name)
+
+  if (!hasColumn('user_id')) {
+    db.exec('ALTER TABLE checkins ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL')
+  }
+  // 舊資料庫沒有這欄，一律補 NULL（等同「原創娃娃／未填寫作品」），不影響既有旅箋的顯示。
+  // CHECK 約束照抄 CREATE TABLE 那份，讓補齊欄位後的舊資料庫和全新建立的資料庫 schema 一致。
+  if (!hasColumn('series')) {
+    db.exec('ALTER TABLE checkins ADD COLUMN series TEXT CHECK(series IS NULL OR length(series) BETWEEN 1 AND 60)')
+  }
+  // 全球化之前的旅箋全都在臺灣，補預設值 TW 就是正確答案，不需要人工回填。
+  // 加上 NOT NULL + DEFAULT 的欄位時 SQLite 會直接用預設值填滿既有列。
+  if (!hasColumn('country_code')) {
+    db.exec(`ALTER TABLE checkins ADD COLUMN country_code TEXT NOT NULL DEFAULT '${DEFAULT_COUNTRY_CODE}' CHECK(length(country_code) = 2)`)
+  }
+
+  // message 的長度上限寫在 CHECK 約束裡，而 SQLite 不能單獨修改 CHECK —— 只能整張表重建。
+  // 用「目前的 SQL 定義是否已經包含新上限」判斷，比記版本號可靠：不論這個資料庫是從哪一版
+  // 升上來的，只要定義還是舊的就重建，已經是新的就完全不動。
+  const definition = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'checkins'"
+  ).get() as { sql: string } | undefined)?.sql || ''
+  if (!new RegExp(`length\\(message\\)\\s+BETWEEN\\s+1\\s+AND\\s+${MAX_MESSAGE_LENGTH}`).test(definition)) {
+    rebuildCheckins(db)
+  }
+}
+
+/**
+ * 標準的 SQLite「重建表格」流程（建新表 → 搬資料 → 丟舊表 → 改名）。
+ *
+ * 兩個非做不可的細節：
+ * 1. 外鍵必須先關掉，否則 DROP TABLE checkins 會沿著 comments.checkin_id 的 ON DELETE CASCADE
+ *    把所有留言一起刪光。關閉期間 comments 的資料列原封不動，改名後 id 對應關係仍然成立。
+ * 2. PRAGMA foreign_keys 在交易內是無效指令，所以只能在交易外開關 —— 這也是為什麼
+ *    finally 一定要把它開回來，否則整個 process 之後的外鍵約束都會失效。
+ * 最後跑一次 foreign_key_check：寧可在啟動時大聲失敗，也不要讓孤兒留言悄悄留在資料庫裡。
+ */
+function rebuildCheckins(db: SQLiteDatabase) {
+  const columns = `id, user_id, nickname, location, country_code, county, latitude, longitude,
+    doll_name, series, message, visited_at, photo, avatar, avatar_preset, created_at`
+  db.pragma('foreign_keys = OFF')
+  try {
+    db.transaction(() => {
+      // DDL 在 SQLite 裡也受交易保護，理論上不會留下半成品；這行純粹是防呆，
+      // 避免任何殘留的暫存表讓下面的 CREATE ... IF NOT EXISTS 靜默跳過、寫進舊結構。
+      db.exec('DROP TABLE IF EXISTS checkins_migration')
+      db.exec(checkinsTableSql('checkins_migration'))
+      db.exec(`INSERT INTO checkins_migration (${columns}) SELECT ${columns} FROM checkins`)
+      db.exec('DROP TABLE checkins')
+      db.exec('ALTER TABLE checkins_migration RENAME TO checkins')
+    })()
+  } finally {
+    db.pragma('foreign_keys = ON')
+  }
+  const violations = db.pragma('foreign_key_check') as unknown[]
+  if (violations.length) {
+    throw new Error(`checkins 重建後有 ${violations.length} 筆外鍵不一致，已中止啟動`)
+  }
 }
 
 export function listCheckins(): Checkin[] {
@@ -176,15 +283,80 @@ export function findCheckin(id: number): Checkin | undefined {
 export function createCheckin(input: CheckinInput, photo: string | null, avatar: string | null, userId: number): Checkin {
   const result = getDatabase().prepare(`
     INSERT INTO checkins
-      (user_id, nickname, location, county, latitude, longitude, doll_name, series, message, visited_at, photo, avatar, avatar_preset)
+      (user_id, nickname, location, country_code, county, latitude, longitude, doll_name, series, message, visited_at, photo, avatar, avatar_preset)
     VALUES
-      (@userId, @nickname, @location, @county, @latitude, @longitude, @dollName, @series, @message, @visitedAt, @photo, @avatar, @avatarPreset)`)
+      (@userId, @nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @series, @message, @visitedAt, @photo, @avatar, @avatarPreset)`)
+    // series 在 CheckinInput 上是可選屬性（舊呼叫端可能沒帶），先補 null 再讓 input 蓋過去；
+    // countryCode 則是必填，不需要預設值。
     .run({ series: null, ...input, photo, avatar, userId })
   return findCheckin(Number(result.lastInsertRowid))!
 }
 
 export function deleteCheckin(id: number) {
   return getDatabase().prepare('DELETE FROM checkins WHERE id = ?').run(id).changes > 0
+}
+
+/**
+ * 草稿：使用者在手機上拍完照、標好地點就先存著，回到電腦再打開同一筆繼續寫。
+ * 因此它必須存在伺服器（而不是 localStorage），也因此每個欄位都允許是空的。
+ */
+export function listDrafts(userId: number): Draft[] {
+  return getDatabase().prepare(
+    `SELECT ${draftColumns} FROM checkin_drafts WHERE user_id = ? ORDER BY updated_at DESC, id DESC`
+  ).all(userId) as Draft[]
+}
+
+export function findDraft(id: number): Draft | undefined {
+  return getDatabase().prepare(`SELECT ${draftColumns} FROM checkin_drafts WHERE id = ?`).get(id) as Draft | undefined
+}
+
+export function countDrafts(userId: number): number {
+  return (getDatabase().prepare('SELECT COUNT(*) AS count FROM checkin_drafts WHERE user_id = ?')
+    .get(userId) as { count: number }).count
+}
+
+export function createDraft(userId: number, input: DraftInput, photo: string | null, avatar: string | null): Draft {
+  const result = getDatabase().prepare(`
+    INSERT INTO checkin_drafts
+      (user_id, nickname, location, country_code, county, latitude, longitude, doll_name, series, message, visited_at, photo, avatar, avatar_preset)
+    VALUES
+      (@userId, @nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @series, @message, @visitedAt, @photo, @avatar, @avatarPreset)`)
+    .run({ ...input, photo, avatar, userId })
+  return findDraft(Number(result.lastInsertRowid))!
+}
+
+/**
+ * 圖片欄位刻意用三種值表達三種意圖：`undefined` 保留原圖（例如電腦端只改文字）、
+ * `null` 清空、字串換成新檔。少了「保留」這個狀態，手機存好的照片會在桌機按下儲存時被清掉。
+ */
+export function updateDraft(
+  id: number,
+  input: DraftInput,
+  photo: string | null | undefined,
+  avatar: string | null | undefined
+): Draft | undefined {
+  getDatabase().prepare(`
+    UPDATE checkin_drafts SET
+      nickname = @nickname, location = @location, country_code = @countryCode, county = @county,
+      latitude = @latitude, longitude = @longitude, doll_name = @dollName, series = @series,
+      message = @message, visited_at = @visitedAt, avatar_preset = @avatarPreset,
+      photo = CASE WHEN @keepPhoto = 1 THEN photo ELSE @photo END,
+      avatar = CASE WHEN @keepAvatar = 1 THEN avatar ELSE @avatar END,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = @id`)
+    .run({
+      ...input,
+      id,
+      photo: photo ?? null,
+      avatar: avatar ?? null,
+      keepPhoto: photo === undefined ? 1 : 0,
+      keepAvatar: avatar === undefined ? 1 : 0
+    })
+  return findDraft(id)
+}
+
+export function deleteDraft(id: number) {
+  return getDatabase().prepare('DELETE FROM checkin_drafts WHERE id = ?').run(id).changes > 0
 }
 
 export function listComments(checkinId: number): Comment[] {

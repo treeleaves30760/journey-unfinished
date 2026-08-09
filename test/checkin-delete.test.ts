@@ -35,6 +35,7 @@ vi.mock('h3', async importOriginal => ({
 const checkinInput: CheckinInput = {
   nickname: '旅箋主人',
   location: '測試景點',
+  countryCode: 'TW',
   county: '臺北市',
   latitude: 25.033,
   longitude: 121.5654,

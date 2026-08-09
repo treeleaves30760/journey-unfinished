@@ -2,7 +2,7 @@
 
 > 小小的你，世界很大。
 
-一個讓使用者分享「帶著 Gal-Game／原創收藏娃娃去旅行」照片與故事的互動紀錄網站。目前版本以臺灣為預設探索區域，首頁地圖會呈現每則旅箋的位置；使用者可上傳照片、選擇預設頭像或從照片裁切頭像，並在旅箋下留言。
+一個讓使用者分享「帶著 Gal-Game／原創收藏娃娃去旅行」照片與故事的互動紀錄網站。地圖涵蓋全球，會依旅箋分佈自動框出視野；使用者可搜尋景點或在地圖上點選標記地點、上傳照片、以 Markdown 寫下心得、選擇預設頭像或從照片裁切頭像，並在旅箋下留言。出門在外可以用手機先拍照存成草稿，回家再用電腦把故事寫完。
 
 > 專案內只使用通用、原創的娃娃示意設計，不包含任何未授權遊戲角色素材。
 
@@ -10,13 +10,17 @@
 
 - Nuxt 4 + Vue 3 SSR 響應式介面
 - 首頁滿版分頁、原生 scroll snap 與段落進出場動畫
-- 首頁 OpenStreetMap／Leaflet 真實圖資、互動頭像標記與縣市篩選
+- **全球地圖**：OpenStreetMap／Leaflet 真實圖資、互動頭像標記，依旅箋分佈自動框出視野，並可依國家與地區篩選
+- **景點搜尋**：輸入店名或地標就能標好座標；點地圖、拖曳圖釘或按「目前位置」都會自動補上國家與行政區（由伺服器代打上游，可用公用 Nominatim 或自架 Photon，見下方說明）
 - Discord OAuth2 登入、SQLite 工作階段與 Discord ID 管理員白名單
-- 寫下旅箋：照片、縣市、景點、座標、娃娃名稱、日期與心得
+- 寫下旅箋：照片、國家／地區、景點、座標、娃娃名稱、日期與心得
+- **旅途留言支援 Markdown**，編輯器附工具列、即時預覽與桌機並排模式
+- **草稿**：手機上拍完照、標好地點就先存著，換到電腦登入同一個帳號接著寫完再發佈
+- **手機快速記錄**（`/checkins/quick`）：拍照 → 標位置 → 存草稿，三步收工；長表單另有黏底操作列
 - 6 種通用預設頭像，或在瀏覽器以 Canvas 裁切照片區塊作為頭像
 - 旅箋詳情與訪客留言（匿名，含內容衛生檢查與分層限流）
 - 作者可自行刪除自己的旅箋，照片一併移除
-- 管理中心：會員列表、旅箋檢視與管理員刪除
+- 管理中心：會員列表、旅箋檢視與管理員刪除、國家／地區分布統計
 - Nitro API + SQLite 持久化
 - 具總量／欄位／檔案上限的串流 multipart 圖片上傳，上傳圖片一律重新編碼並剝除 EXIF/GPS
 - Docker 多階段 production image、非 root 執行、健康檢查與 Compose volume
@@ -26,7 +30,7 @@
 
 建立時已採 npm registry 的穩定最新版：
 
-- Nuxt `4.5.0`（Vue `3.5.x`、Nitro `2.13.x`）
+- Nuxt `4.5.2`（Vue `3.5.x`、Nitro `2.13.x`）
 - Leaflet `1.9.4` + OpenStreetMap Standard tiles
 - @fastify/busboy `3.2.0`（有界限的串流 multipart parser）
 - better-sqlite3 `13.0.1`
@@ -42,7 +46,10 @@
 - **上傳圖片一律以 sharp 重新解碼並重新編碼，藉此剝除全部 EXIF/XMP/IPTC metadata**（含 GPS 座標、拍攝時間、相機序號）。EXIF orientation 會先套用再丟棄，避免直向照片被轉倒。同時限制輸入像素數與輸出最長邊 4096px，防止 decompression bomb
 - 單檔預設限制 5 MiB（可用環境變數調整），multipart 以 Busboy 串流解析並限制總檔案數、欄位數與 request 大小，避免先把無界限請求載入記憶體
 - 上傳檔名由密碼學亂數產生，讀取路由會防止路徑穿越
-- API 對長度、縣市、座標、日期、頭像選項做伺服器端驗證；留言 JSON 亦以串流方式限制為 8 KiB
+- API 對長度、國家代碼、座標、日期、頭像選項做伺服器端驗證；留言 JSON 亦以串流方式限制為 8 KiB
+- **Markdown 全程不產生 HTML 字串**：`utils/markdown.ts` 把留言解析成資料樹，`MarkdownView.vue` 用 Vue 的 `h()` 渲染成節點，整條路徑沒有任何 `v-html`。使用者寫的 `<script>` 只會顯示成文字，也因此不依賴任何 sanitizer 是否正確接上；連結只放行 `http`／`https`／`mailto` 與站內相對路徑，外部連結一律補 `noopener noreferrer nofollow`
+- 草稿是使用者尚未公開的內容，**連管理員都讀不到**；非擁有者一律回 404 而不是 403（403 等於洩漏「這個編號存在」），並限制每人最多 20 份，避免變成無上限的空間消耗路徑
+- 景點搜尋由伺服器代打上游，前端 CSP 的 `connect-src` 維持 `'self'`；端點要求登入並限流，關鍵字走與旅箋自由文字相同的衛生規則
 - **旅箋與留言的自由文字套用同一套內容衛生規則**：先 NFC 正規化再量長度（避免用組合字元繞過上限）、拒絕控制字元與零寬／雙向覆寫字元（但不誤殺 ZWJ emoji 組合）、限制連結數量。兩條路徑一致處理 —— 旅箋雖需登入，但 Discord 帳號誰都能註冊
 - 匿名留言另有分層限流（每分鐘爆量閘、每小時總量、單篇上限）與內容指紋，擋短時間內的重複洗版
 - SQLite 使用 prepared statements
@@ -57,15 +64,15 @@
 
 ```text
 app.vue                    Nuxt 應用外框
-pages/                     首頁、登入、建立旅箋、旅箋詳情、管理中心
+pages/                     首頁、探索地圖、登入、建立旅箋、手機快速記錄、草稿、旅箋詳情、管理中心
 middleware/                會員與管理員頁面守衛
-components/                通用 RegionMap、卡片、頭像裁切等元件
+components/                RegionMap、LocationPicker、MarkdownEditor／MarkdownView、卡片、頭像裁切等元件
 composables/               useAuth、useCheckins 等前端共用邏輯
-utils/                     前後端共用工具（安全回跳路徑）
+utils/                     前後端共用工具（安全回跳路徑、國家代碼對照、Markdown 解析）
 assets/css/main.css        全站視覺與響應式樣式
-server/api/                Nitro JSON / multipart API
+server/api/                Nitro JSON / multipart API（旅箋、留言、草稿、地理編碼、管理）
 server/routes/uploads/     上傳圖片讀取路由
-server/utils/              SQLite、驗證、上傳、請求安全與 Discord 工具
+server/utils/              SQLite、驗證、上傳、草稿、地理編碼、請求安全與 Discord 工具
 data/                      SQLite 與上傳圖片（執行時產生）
 test/                      Vitest 單元與安全測試
 e2e/                       Playwright 多尺寸頁面與權限檢查
@@ -156,7 +163,7 @@ npm run build
 npm run start
 ```
 
-單元測試目前有 **9 個檔案、161 個案例**，涵蓋：
+單元測試目前有 **30 個檔案、524 個案例**，涵蓋：
 
 - OAuth URL／code exchange／state、Session Cookie 與撤銷、管理員白名單、安全回跳路徑
 - SQLite fresh schema 與 legacy migration、foreign-key cascade、建立者綁定、檔案刪除
@@ -166,6 +173,10 @@ npm run start
 - 內容衛生：NFC 正規化長度、控制字元、零寬／雙向字元（但不誤殺 ZWJ emoji）、連結數量
 - 留言分層限流、單篇上限與重複內容指紋
 - 旅箋擁有者自刪的權限矩陣（含 `user_id` 為 NULL 的種子資料）
+- Markdown 解析器：語法覆蓋、找不到成對符號時不吞掉後文、巢狀深度上限，以及「HTML 與 `javascript:` 連結不會產生可執行節點」的安全回歸
+- 國家代碼對照表的唯一性與格式，以及國旗由區域指示符號推導
+- 地理編碼上游：Nominatim 與 Photon 兩種回應格式的正規化（含 GeoJSON 經緯度順序）、查詢快取、節流與排隊上限、上游失敗的錯誤對應
+- 草稿的擁有權（非擁有者一律 404）、圖片的保留／替換／清空三種語意、發佈時沿用草稿照片與孤兒檔案回收
 
 E2E 另涵蓋頁面權限與 320px 到桌面、矮螢幕的滿版 snap 幾何。Playwright 每次會建立獨立暫存資料庫與 uploads 目錄，結束後自動移除，不會污染開發資料。
 
@@ -177,19 +188,28 @@ curl http://localhost:3000/api/health
 
 ## 地圖架構與 OpenStreetMap 使用方式
 
-首頁的 `components/RegionMap.client.vue` 是可重用的 client-only 地圖渲染元件，使用 Leaflet 顯示 OpenStreetMap Standard tiles，並直接以每則旅箋的經緯度建立頭像 Marker。元件的 `region` 參數包含 `center`、`zoom`、`minZoom`、`maxZoom` 與 `bounds`，未來支援日本、亞洲或全球時不需重寫地圖，只需傳入新的區域設定與旅箋資料。
+`components/RegionMap.vue` 是可重用的地圖渲染元件（外層以 `<ClientOnly>` 包住），使用 Leaflet 顯示 OpenStreetMap Standard tiles，並直接以每則旅箋的經緯度建立頭像 Marker。預設視野是**世界**且刻意不設 `maxBounds` —— 把地圖鎖在單一國家，就等於把海外旅箋鎖在畫面外。
 
-目前預設臺灣設定：
+傳入 `fit-to-checkins` 時，元件會依目前顯示的旅箋自動框出可視範圍（單一旅箋時以 `maxZoom: 13` 收斂，保留「在世界的哪裡」的脈絡），只有在旅箋集合本身改變（初次載入、切換篩選）時才重新框，不會在使用者拖曳地圖時把鏡頭拉走。仍然可以用 `region` 參數指定固定的 `center`／`zoom`／`bounds`。
 
-```ts
-{
-  id: 'taiwan',
-  label: '臺灣',
-  center: [23.72, 121.0],
-  zoom: 7,
-  bounds: [[20.4, 117.7], [26.9, 123.8]]
-}
-```
+座標驗證放寬到整顆地球（緯度 ±90、經度 ±180）；國家以 ISO 3166-1 alpha-2 代碼儲存，顯示名稱一律由 `utils/countries.ts` 推導，同一個國家不會因為來源不同而在篩選器裡分裂成好幾項。
+
+### 景點搜尋與反向地理編碼
+
+瀏覽器只打自家的 `/api/geo/search` 與 `/api/geo/reverse`，由伺服器代打上游的 Nominatim 相容服務。這樣做有三個好處：CSP 的 `connect-src` 維持 `'self'`；使用者的 IP 與搜尋關鍵字不會直接送到第三方；上游的使用條款（可辨識 User-Agent、每秒最多一次請求）能在一個地方集中遵守。
+
+`server/utils/geocoding.ts` 內建 10 分鐘查詢快取、上游間隔節流（排隊超過 3 秒直接回 429）與 6 秒逾時，並要求登入 + 每 IP 限流，避免本站變成別人濫用上游的跳板。`NUXT_GEOCODER_URL` 留空即關閉搜尋，表單會退回「在地圖上點選或手動輸入座標」。
+
+支援兩種上游，由 `NUXT_GEOCODER_PROVIDER` 切換：
+
+| | `nominatim`（預設） | `photon` |
+|---|---|---|
+| 用途 | 公用的 `nominatim.openstreetmap.org`，零維運 | 自架，擺脫速率上限 |
+| 速率 | 條款限制**每秒 1 次**，多人同時搜尋會排隊 | 沒有上限，應用端節流自動關閉 |
+| 中文 | `accept-language=zh-TW`，有中文名就回中文 | 只支援 `default/de/en/fr`，這裡用 `default`＝OSM 的當地語言名稱 |
+| 成本 | 無 | 約 95 GB 磁碟；不需匯入，下載預建索引即可 |
+
+兩者的回應格式完全不同（Nominatim 是自訂 JSON，Photon 是 GeoJSON，連經緯度順序都相反），各自有一份 parser，最後收斂成同一個 `GeoPlace`。自架的完整步驟、硬體比較與踩雷點見 [`deploy/k3s/README.md`](deploy/k3s/README.md#自架地點搜尋選用)。
 
 地圖依 OpenStreetMap 規範保留可見 attribution。公開正式服務需遵守 [OSM Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/)：不可大量預抓、離線抓取或移除 attribution。若流量增加，應改用有 SLA 的圖磚供應商（例如 MapTiler、Stadia Maps）或自行架設 tile server，並只替換 `tileLayer` URL／attribution，不需更動旅箋資料模型。
 
@@ -202,10 +222,17 @@ curl http://localhost:3000/api/health
 | `GET` | `/api/auth/session` | 目前登入狀態 |
 | `POST` | `/api/auth/logout` | 登出並撤銷伺服器 Session |
 | `GET` | `/api/checkins` | 旅箋列表 |
-| `POST` | `/api/checkins` | 登入後以 multipart 建立旅箋 |
+| `POST` | `/api/checkins` | 登入後以 multipart 建立旅箋；帶 `draftId` 即為「發佈草稿」，會沿用草稿已上傳的照片並刪除該草稿 |
 | `GET` | `/api/checkins/:id` | 旅箋與留言詳情 |
 | `DELETE` | `/api/checkins/:id` | 作者刪除自己的旅箋（管理員亦可） |
 | `POST` | `/api/checkins/:id/comments` | 建立留言（匿名） |
+| `GET` | `/api/drafts` | 自己的草稿列表 |
+| `POST` | `/api/drafts` | 建立草稿（multipart，所有欄位皆可留空） |
+| `GET` | `/api/drafts/:id` | 讀取自己的草稿（非擁有者一律 404） |
+| `PUT` | `/api/drafts/:id` | 更新草稿；未帶新檔案＝保留原圖，`clearPhoto=1`／`clearAvatar=1` 才清空 |
+| `DELETE` | `/api/drafts/:id` | 刪除草稿與其圖片 |
+| `GET` | `/api/geo/search?q=` | 景點搜尋（登入後可用，伺服器代打 Nominatim） |
+| `GET` | `/api/geo/reverse?lat=&lon=` | 座標反查國家與行政區 |
 | `GET` | `/api/admin/overview` | 管理員會員與旅箋資料 |
 | `DELETE` | `/api/admin/checkins/:id` | 管理員刪除旅箋 |
 | `GET` | `/uploads/:file` | 讀取已驗證圖片 |
@@ -320,6 +347,10 @@ trip.example.com {
 | `NUXT_DISCORD_REDIRECT_URI` | `<APP_URL>/auth/discord` | Discord Portal 中完全相同的 callback URL |
 | `NUXT_ADMIN_DISCORD_IDS` | 無 | 逗號分隔的管理員 Discord User ID |
 | `NUXT_SESSION_DAYS` | `30` | 登入 Session 天數，程式限制為 1–90 天 |
+| `NUXT_GEOCODER_URL` | `https://nominatim.openstreetmap.org` | 景點搜尋的上游服務。留空即關閉搜尋，表單仍可點地圖或手動輸入座標 |
+| `NUXT_GEOCODER_PROVIDER` | `nominatim` | `nominatim`（公用服務，每秒 1 次上限）或 `photon`（自架，無上限）。兩者回應格式不同，見上方說明 |
+| `NUXT_GEOCODER_EMAIL` | 無 | 附給 Nominatim 的聯絡信箱；被判定濫用時對方會先來信而不是直接封鎖。自架 Photon 時用不到 |
+| `NUXT_GEOCODER_MIN_INTERVAL_MS` | 空＝自動 | 兩次上游請求的最小間隔。留空時依 provider 決定（Nominatim 1100、Photon 0）；指到別人架的公用服務時才需要自己填 |
 | `HOST` | `0.0.0.0` | Nitro 監聽位址 |
 | `PORT` | `3000` | Nitro 連接埠 |
 

@@ -60,6 +60,20 @@ data:
   # 時才安全 —— 見 nginx-journey.conf.example。若改回 $proxy_add_x_forwarded_for
   # （附加語意），最左值由用戶端提供，請把這個值設回 0。
   NUXT_TRUSTED_PROXY_HOPS: "1"
+  # 景點搜尋的上游服務。瀏覽器永遠只打自家 /api/geo/*，由這個 Pod 代打上游，
+  # 因此叢集必須容許對外連線；設成空字串即關閉搜尋（表單仍可點地圖或手動輸入座標）。
+  # 兩個值都來自 deploy.env（沒設就是公用 Nominatim，也就是原本的行為）：
+  #   公用 Nominatim  GEOCODER_PROVIDER=nominatim
+  #                   GEOCODER_URL=https://nominatim.openstreetmap.org
+  #   自架 Photon     GEOCODER_PROVIDER=photon
+  #                   GEOCODER_URL=http://photon.geocoder.svc.cluster.local:2322
+  # 公用實例的條款是「每秒 1 次、不得大量批次」，多人同時搜尋一定會排隊；
+  # 自架的作法見 deploy/k3s/geocoder.yaml。
+  NUXT_GEOCODER_URL: "${GEOCODER_URL}"
+  NUXT_GEOCODER_PROVIDER: "${GEOCODER_PROVIDER}"
+  # 建議填一個看得到信的信箱：被 Nominatim 判定濫用時，對方會先來信而不是直接封鎖。
+  # 這是聯絡方式而非機密，放 ConfigMap 即可。自架 Photon 時用不到。
+  NUXT_GEOCODER_EMAIL: ""
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -199,6 +213,17 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # 自架的地點搜尋（deploy/k3s/geocoder.yaml）。pod CIDR 落在 10.0.0.0/8，
+    # 被下面那條 except 排除掉了，所以必須單獨放行 —— 少了這條，切換成 Photon
+    # 之後每次搜尋都會逾時，而且症狀看起來像「上游掛了」。
+    # 沒部署 geocoder 時這條規則沒有對象，是安全的無作用設定。
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: geocoder
+      ports:
+        - protocol: TCP
+          port: 2322
     # 只放行對外 HTTPS（Discord OAuth token 交換與 profile 查詢），
     # 並排除 RFC1918，避免這個 pod 被拿來當跳板打 NAS 上其他服務。
     - to:

@@ -26,7 +26,8 @@ interface RecentComment {
 interface AdminStatsResponse {
   totals: { checkins: number, checkinsWithPhoto: number, users: number, comments: number }
   timeSeries: { daily: DailyPoint[], weekly: WeeklyPoint[] }
-  countyDistribution: Array<{ county: string, count: number }>
+  countyDistribution: Array<{ county: string, countryCode: string, count: number }>
+  countryDistribution: Array<{ countryCode: string, count: number }>
   topAuthors: Array<{ userId: number, displayName: string, avatarUrl: string | null, checkinCount: number }>
   recentActivity: { checkins: RecentCheckin[], comments: RecentComment[] }
 }
@@ -68,12 +69,27 @@ const trendSummary = computed(() => {
   return `折線圖顯示${span}每日新增旅箋與新會員的數量，${span}總計新增 ${totalCheckins} 則旅箋、${totalUsers} 位新會員。`
 })
 
-const countyItems = computed(() => data.value?.countyDistribution.map(row => ({ label: row.county, value: row.count })) ?? [])
+// 同名的行政區在不同國家都可能出現，所以標籤帶上國家；臺灣的縣市則維持原樣（見 placeLabel）。
+const countyItems = computed(() => data.value?.countyDistribution.map(row => ({
+  label: placeLabel(row),
+  value: row.count
+})) ?? [])
 const countySummary = computed(() => {
   const items = countyItems.value
   if (!items.length) return '長條圖目前沒有任何旅箋資料可以顯示。'
   const top = items[0]!
-  return `長條圖顯示各縣市的旅箋數量，共 ${items.length} 個縣市留下足跡，最多的是${top.label}，有 ${top.value} 則。`
+  return `長條圖顯示各地區的旅箋數量，共 ${items.length} 個地區留下足跡，最多的是${top.label}，有 ${top.value} 則。`
+})
+
+const countryItems = computed(() => data.value?.countryDistribution.map(row => ({
+  label: `${countryFlag(row.countryCode)} ${countryName(row.countryCode)}`,
+  value: row.count
+})) ?? [])
+const countrySummary = computed(() => {
+  const items = countryItems.value
+  if (!items.length) return '長條圖目前沒有任何旅箋資料可以顯示。'
+  const top = items[0]!
+  return `長條圖顯示各國家的旅箋數量，共 ${items.length} 個國家留下足跡，最多的是${top.label}，有 ${top.value} 則。`
 })
 
 const authorItems = computed(() => data.value?.topAuthors.map(row => ({ id: row.userId, label: row.displayName, value: row.checkinCount })) ?? [])
@@ -122,8 +138,12 @@ useHead({ title: '統計數據｜未完旅箋管理中心' })
 
       <div class="stats-grid-2">
         <section class="admin-section">
-          <div class="admin-section-heading"><div><span class="eyebrow">COUNTIES</span><h2>縣市分布</h2></div><span>{{ data.countyDistribution.length }} 個縣市</span></div>
-          <StatsBarChart title="各縣市旅箋數" :summary="countySummary" :items="countyItems" color="var(--rose)" unit="則" />
+          <div class="admin-section-heading"><div><span class="eyebrow">COUNTRIES</span><h2>國家分布</h2></div><span>{{ data.countryDistribution.length }} 個國家</span></div>
+          <StatsBarChart title="各國旅箋數" :summary="countrySummary" :items="countryItems" color="var(--forest)" unit="則" />
+        </section>
+        <section class="admin-section">
+          <div class="admin-section-heading"><div><span class="eyebrow">REGIONS</span><h2>地區分布</h2></div><span>{{ data.countyDistribution.length }} 個地區</span></div>
+          <StatsBarChart title="各地區旅箋數" :summary="countySummary" :items="countyItems" color="var(--rose)" unit="則" />
         </section>
         <section class="admin-section">
           <div class="admin-section-heading"><div><span class="eyebrow">AUTHORS</span><h2>最活躍作者</h2></div><span>前 {{ data.topAuthors.length }} 名</span></div>

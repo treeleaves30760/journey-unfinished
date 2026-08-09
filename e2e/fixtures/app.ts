@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import Database from 'better-sqlite3'
+import sharp from 'sharp'
 import type { BrowserContext, Page } from '@playwright/test'
 
 export const baseURL = 'http://127.0.0.1:3200'
@@ -24,6 +25,14 @@ function databasePath() {
 
 export function sessionHash(token: string) {
   return createHash('sha256').update(token).digest('hex')
+}
+
+/**
+ * 上傳測試要用真的能解碼的圖片：伺服器會用 sharp 重新編碼以剝除 EXIF/GPS，
+ * 只湊出 magic bytes 的假檔案會在解碼階段就被擋成 415，測不到它後面的任何行為。
+ */
+export function sampleJpeg(background = '#d9677e') {
+  return sharp({ create: { width: 32, height: 32, channels: 3, background } }).jpeg().toBuffer()
 }
 
 export async function seedApplication() {
@@ -53,6 +62,16 @@ export async function seedApplication() {
   const firstCheckin = db.prepare('SELECT id FROM checkins ORDER BY id LIMIT 1').get() as { id: number }
   db.close()
   return { firstCheckinId: firstCheckin.id }
+}
+
+/**
+ * 草稿是跨測試殘留的狀態：同一個 e2e 資料庫會被整輪測試共用，前一個案例存下的草稿
+ * 會讓下一個案例的「應該只有一份草稿」變成三份。每個草稿測試開始前清空，彼此才獨立。
+ */
+export function clearDrafts() {
+  const db = new Database(databasePath())
+  db.prepare('DELETE FROM checkin_drafts').run()
+  db.close()
 }
 
 export function deleteSession(token: string) {

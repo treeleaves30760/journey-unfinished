@@ -7,6 +7,7 @@ import {
   deleteSession,
   identities,
   ownerDiscordId,
+  sampleJpeg,
   seedApplication,
   sessionExists,
   sessionTokens,
@@ -88,6 +89,7 @@ test('authenticated creation stores server-derived ownership and admin deletion 
       nickname: 'API 測試旅人',
       dollName: '測試娃',
       location: '完整測試景點',
+      countryCode: 'TW',
       county: '臺北市',
       latitude: '25.033',
       longitude: '121.5654',
@@ -95,7 +97,9 @@ test('authenticated creation stores server-derived ownership and admin deletion 
       visitedAt: '2026-01-01',
       avatarPreset: 'sun',
       userId: '999999',
-      photo: { name: 'trip.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, ...Array(32).fill(0)]) }
+      // 必須是真的能被解碼的 JPEG：上傳路徑會用 sharp 重新編碼以剝除 EXIF/GPS，
+      // 只湊出 magic bytes 的假檔案會在解碼階段被擋成 415，測不到後面的擁有權與刪檔。
+      photo: { name: 'trip.jpg', mimeType: 'image/jpeg', buffer: await sampleJpeg() }
     }
   })
   const responseBody = await response.json() as { checkin?: { id: number, photo: string }, message?: string }

@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { Checkin } from '~/composables/useCheckins'
 
-defineProps<{ checkin: Checkin }>()
+const props = defineProps<{ checkin: Checkin }>()
+
+// 卡片上的摘要要的是「一段可讀的句子」：直接印原始 Markdown 會看到 ## 與 ** 這些符號，
+// 所以先轉成純文字再截斷。完整排版留給詳情頁的 MarkdownView。
+const excerpt = computed(() => markdownToPlainText(props.checkin.message, 110))
+const place = computed(() => placeLabel(props.checkin))
 </script>
 
 <template>
@@ -9,7 +14,7 @@ defineProps<{ checkin: Checkin }>()
     <NuxtLink :to="`/checkins/${checkin.id}`" class="card-photo" :class="`scene-${(checkin.id % 6) + 1}`">
       <img v-if="checkin.photo" :src="checkin.photo" :alt="`${checkin.dollName}在${checkin.location}的照片`" loading="lazy">
       <div v-else class="placeholder-scene" aria-hidden="true"><i class="sun-or-moon" /><i class="hill far" /><i class="hill near" /></div>
-      <span class="county-chip">{{ checkin.county }}</span>
+      <span class="county-chip">{{ countryFlag(checkin.countryCode) }} {{ place }}</span>
     </NuxtLink>
     <div class="card-body">
       <div class="card-author">
@@ -18,8 +23,8 @@ defineProps<{ checkin: Checkin }>()
       </div>
       <NuxtLink :to="`/checkins/${checkin.id}`"><h3>{{ checkin.location }}</h3></NuxtLink>
       <small v-if="checkin.series" class="card-series">✎ {{ checkin.series }}</small>
-      <p>{{ checkin.message }}</p>
-      <div class="card-meta"><span>⌖ {{ checkin.county }}</span><span>♡ {{ checkin.commentCount }} 則留言</span></div>
+      <p>{{ excerpt }}</p>
+      <div class="card-meta"><span>⌖ {{ place }}</span><span>♡ {{ checkin.commentCount }} 則留言</span></div>
     </div>
   </article>
 </template>

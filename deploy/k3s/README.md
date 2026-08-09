@@ -173,6 +173,63 @@ sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=1.0.1/' deploy/k3s/deploy.env
 
 ---
 
+## 自架地點搜尋（選用）
+
+預設用公用的 `nominatim.openstreetmap.org`。它的使用條款是**每秒最多一次請求**，
+應用端已經替你排隊（1.1 秒節流 + 10 分鐘快取），但多人同時搜尋還是會排隊等待。
+要徹底擺脫這個上限就自架。
+
+### 為什麼是 Photon，不是 Nominatim
+
+| | 自架 Nominatim（全球） | 自架 Photon（全球） |
+|---|---|---|
+| 磁碟 | **1 TB 以上**（實測匯入後約 958 GB） | 約 **95 GB**（下載 57 GiB 壓縮檔） |
+| 記憶體 | 建議 **128 GB** 以上 | 建議 64 GB，實務上靠 OS page cache，少一點也能跑 |
+| 建置時間 | 匯入約 **2.5 天** | **不需要匯入**，下載解開即可用（數小時） |
+| 資料更新 | 自己接 diff 更新 | 上游每週重建，容器可自動抓 |
+| 中文名稱 | 支援 `accept-language=zh-TW` | **不支援**，`lang` 只有 `default/de/en/fr` |
+
+Photon 的索引本來就是拿 Nominatim 的資料建出來的，資料來源一致。
+**唯一實質的取捨是中文名稱**：這裡一律用 `lang=default`，也就是 OSM 的 `name` 標籤
+（當地語言）—— 臺灣是中文、日本是日文、冰島是冰島文。對旅遊紀錄來說看到的就是招牌上的
+名字，通常反而更貼近現場；「行政區」欄位會變成當地語言，使用者可以在表單裡自己改。
+國家名稱不受影響，那是應用自己依國碼推導的。
+
+### 步驟
+
+```bash
+# 1. 部署 Photon。第一次啟動會下載全球索引（約 57 GiB），依頻寬要數小時。
+#    腳本會先檢查節點剩餘空間，不足會直接停下來。
+./deploy/k3s/scripts/deploy-geocoder.sh
+
+# 2. 看進度（可反覆執行）。pod 是 Running 但 not ready 就是還在下載，屬正常。
+./deploy/k3s/scripts/deploy-geocoder.sh --status
+
+# 3. 顯示 ready 之後才切換應用。改 deploy/k3s/deploy.env：
+#      GEOCODER_PROVIDER=photon
+#      GEOCODER_URL=http://photon.geocoder.svc.cluster.local:2322
+./deploy/k3s/scripts/deploy.sh
+```
+
+切換之後應用端的節流會自動關掉（對自己的伺服器節流成每秒一次，等於白架），
+每人每 10 分鐘的請求上限則保留 —— 那一層是防止本站被人當成免費的地理編碼代理。
+
+要退回公用服務：把 `deploy.env` 那兩行改回 `nominatim` 與公用網址，重跑 `deploy.sh` 即可，
+Photon 可以先留著不動。要連 Photon 一起移除：`kubectl delete namespace geocoder`
+（**會一併刪掉 PVC 與那 95 GB 的索引**）。
+
+### 幾個容易踩到的點
+
+- **NetworkPolicy 必須放行。** 應用的 egress 規則排除了 RFC1918，而 pod CIDR 落在
+  `10.0.0.0/8` 裡；`app.yaml` 已經單獨加了一條「允許連到 geocoder namespace 的 2322」。
+  少了它，切換之後每次搜尋都會逾時，症狀看起來像「上游掛了」。
+- **namespace 用 baseline 而不是 restricted。** Photon 映像的 entrypoint 要先以 root
+  把資料目錄 chown 給 uid 9011 再降權，restricted 會讓它在第一步就起不來。
+- **索引更新策略。** 預設 `SEQUENTIAL`（省空間，更新期間短暫查不到）。改成 `PARALLEL`
+  可以做到更新不中斷，但需要兩份索引的空間（約 190 GB）。
+
+---
+
 ## 備份
 
 `update.sh` 每次部署前都會自己備份一份到 `~/journey-backups/`。要單獨備份時：

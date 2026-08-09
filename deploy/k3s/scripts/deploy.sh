@@ -24,6 +24,14 @@ set -a; source "$HERE/deploy.env"; set +a
 : "${NODE_CIDR:?deploy.env 未設定 NODE_CIDR（節點內網位址，例如 10.0.0.1/32。查法見 deploy.env.example）}"
 : "${APP_NODEPORT:=30300}"; export APP_NODEPORT
 : "${DATA_SIZE:=10Gi}"; export DATA_SIZE
+# 地點搜尋的上游。這兩個有安全的通用預設值（＝維持公用 Nominatim，也就是原本的行為），
+# 所以給預設而不是像 NODE_CIDR 那樣強制填 —— 猜錯不會讓站台壞掉，只是搜尋比較慢。
+: "${GEOCODER_URL:=https://nominatim.openstreetmap.org}"; export GEOCODER_URL
+: "${GEOCODER_PROVIDER:=nominatim}"; export GEOCODER_PROVIDER
+case "$GEOCODER_PROVIDER" in
+  nominatim|photon) ;;
+  *) echo "deploy.env 的 GEOCODER_PROVIDER 只能是 nominatim 或 photon（目前：$GEOCODER_PROVIDER）" >&2; exit 1 ;;
+esac
 
 # .env 只取需要的三個值，避免把 NUXT_PUBLIC_APP_URL 之類的本機設定帶進叢集
 # （那些由 ConfigMap 依 APP_HOST 產生）。
@@ -34,8 +42,9 @@ ADMIN_DISCORD_IDS="$(read_env NUXT_ADMIN_DISCORD_IDS)"
 [[ -n "$DISCORD_CLIENT_ID" && -n "$DISCORD_CLIENT_SECRET" ]] \
   || { echo ".env 內的 NUXT_DISCORD_CLIENT_ID / NUXT_DISCORD_CLIENT_SECRET 是空的" >&2; exit 1; }
 
-echo "==> namespace / 應用資源（APP_HOST=${APP_HOST}, IMAGE_TAG=${IMAGE_TAG}）"
-envsubst '${APP_HOST} ${IMAGE_TAG} ${APP_NODEPORT} ${DATA_SIZE} ${NODE_CIDR}' < "$HERE/app.yaml" | kubectl apply -f -
+echo "==> namespace / 應用資源（APP_HOST=${APP_HOST}, IMAGE_TAG=${IMAGE_TAG}, GEOCODER=${GEOCODER_PROVIDER}）"
+envsubst '${APP_HOST} ${IMAGE_TAG} ${APP_NODEPORT} ${DATA_SIZE} ${NODE_CIDR} ${GEOCODER_URL} ${GEOCODER_PROVIDER}' \
+  < "$HERE/app.yaml" | kubectl apply -f -
 
 echo "==> Secret（--dry-run | apply 讓重跑可以就地更新）"
 kubectl -n "$NS" create secret generic journey-secrets \

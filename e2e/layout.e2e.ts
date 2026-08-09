@@ -61,7 +61,8 @@ for (const viewport of [
 
     test('creation and admin pages keep visible controls inside the viewport', async ({ page, context }) => {
       await authenticate(context, 'admin')
-      for (const path of ['/checkins/new', '/admin']) {
+      // /checkins/quick 與 /drafts 是手機優先的兩頁，最窄的 320px 更該守住不溢出
+      for (const path of ['/checkins/new', '/checkins/quick', '/drafts', '/admin']) {
         await page.goto(path)
         await expect(page).toHaveURL(new RegExp(`${path}$`))
         await expectNoAccidentalOverflow(page)

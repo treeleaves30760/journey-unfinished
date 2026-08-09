@@ -3,6 +3,7 @@ import type { Checkin } from '~/composables/useCheckins'
 
 const { data, status, error, refresh } = await useFetch<{ checkins: Checkin[] }>('/api/checkins')
 const selected = ref<Checkin | null>(null)
+const countryFilter = ref('全部國家')
 const county = ref('全部地區')
 const seriesFilter = ref('全部作品')
 const dollNameFilter = ref('全部娃娃')
@@ -31,7 +32,8 @@ function matchesKeyword(item: Checkin, needle: string) {
 const filtered = computed(() => {
   const needle = normalizeSearchText(keyword.value)
   const list = checkins.value.filter(item =>
-    (county.value === '全部地區' || item.county === county.value)
+    (countryFilter.value === '全部國家' || item.countryCode === countryFilter.value)
+    && (county.value === '全部地區' || item.county === county.value)
     && (seriesFilter.value === '全部作品' || item.series === seriesFilter.value)
     && (dollNameFilter.value === '全部娃娃' || item.dollName === dollNameFilter.value)
     && matchesKeyword(item, needle)
@@ -39,12 +41,21 @@ const filtered = computed(() => {
   return list.sort((a, b) => sort.value === 'new' ? b.visitedAt.localeCompare(a.visitedAt) : a.visitedAt.localeCompare(b.visitedAt))
 })
 
-const availableCounties = computed(() => [...new Set(checkins.value.map(item => item.county))])
+const availableCountries = computed(() => [...new Set(checkins.value.map(item => item.countryCode))]
+  .sort((a, b) => countryName(a).localeCompare(countryName(b), 'zh-Hant')))
+// 選了國家之後，地區選單只列該國的行政區：全球化之後把所有國家的行政區混在同一份清單裡，
+// 使用者會在幾十個彼此無關的地名裡找自己要的那一個。
+const availableCounties = computed(() => [...new Set(checkins.value
+  .filter(item => countryFilter.value === '全部國家' || item.countryCode === countryFilter.value)
+  .map(item => item.county))])
+
+// 換國家時，原本選的地區多半不屬於新國家，留著會讓結果永遠是空的
+watch(countryFilter, () => { county.value = '全部地區' })
 // 只從「有填作品」的旅箋取值：series 是 null 的原創娃娃不該在下拉選單裡變成一個叫 null 的選項。
 const availableSeries = computed(() => [...new Set(checkins.value.map(item => item.series).filter((value): value is string => Boolean(value)))])
 const availableDollNames = computed(() => [...new Set(checkins.value.map(item => item.dollName))])
 const hasActiveFilters = computed(() =>
-  county.value !== '全部地區' || seriesFilter.value !== '全部作品'
+  countryFilter.value !== '全部國家' || county.value !== '全部地區' || seriesFilter.value !== '全部作品'
   || dollNameFilter.value !== '全部娃娃' || keyword.value !== ''
 )
 const totalComments = computed(() => checkins.value.reduce((sum, item) => sum + item.commentCount, 0))
@@ -81,6 +92,7 @@ async function goFullscreenMap() {
 }
 
 function clearFilters() {
+  countryFilter.value = '全部國家'
   county.value = '全部地區'
   seriesFilter.value = '全部作品'
   dollNameFilter.value = '全部娃娃'
@@ -124,7 +136,7 @@ onBeforeUnmount(() => panelObserver?.disconnect())
         </div>
         <div class="hero-stats" aria-label="網站統計">
           <span><strong>{{ checkins.length }}</strong>則旅箋</span>
-          <span><strong>{{ availableCounties.length }}</strong>個縣市</span>
+          <span><strong>{{ availableCountries.length }}</strong>個國家</span>
           <span><strong>{{ totalComments }}</strong>份交流</span>
         </div>
       </div>
@@ -147,6 +159,7 @@ onBeforeUnmount(() => panelObserver?.disconnect())
         <div v-if="checkins.length" class="explore-toolbar panel-enter from-top" aria-label="探索篩選條件">
           <div class="toolbar-summary"><span>目前顯示</span><strong>{{ filtered.length }} 則沿途旅箋</strong></div>
           <div class="filters">
+            <label><span>國家</span><select v-model="countryFilter"><option>全部國家</option><option v-for="code in availableCountries" :key="code" :value="code">{{ countryFlag(code) }} {{ countryName(code) }}</option></select></label>
             <label><span>地區</span><select v-model="county"><option>全部地區</option><option v-for="item in availableCounties" :key="item">{{ item }}</option></select></label>
             <label><span>作品</span><select v-model="seriesFilter"><option>全部作品</option><option v-for="item in availableSeries" :key="item">{{ item }}</option></select></label>
             <label><span>娃娃名稱</span><select v-model="dollNameFilter"><option>全部娃娃</option><option v-for="item in availableDollNames" :key="item">{{ item }}</option></select></label>
@@ -156,7 +169,7 @@ onBeforeUnmount(() => panelObserver?.disconnect())
           </div>
         </div>
 
-        <div v-if="status === 'pending'" class="state-panel" role="status"><i class="loader" />正在展開臺灣地圖…</div>
+        <div v-if="status === 'pending'" class="state-panel" role="status"><i class="loader" />正在展開世界地圖…</div>
         <div v-else-if="error" class="state-panel error-state" role="alert">
           <strong>地圖暫時迷路了</strong><p>{{ errorMessage(error) }}</p><button class="secondary-button" @click="refresh()">再試一次</button>
         </div>
@@ -166,7 +179,7 @@ onBeforeUnmount(() => panelObserver?.disconnect())
         <div v-else class="map-layout">
           <div class="map-panel panel-enter from-left">
             <ClientOnly>
-              <RegionMap :checkins="filtered" :selected-id="selected?.id" @select="selectCheckin" />
+              <RegionMap :checkins="filtered" :selected-id="selected?.id" fit-to-checkins @select="selectCheckin" />
               <template #fallback>
                 <div class="map-loading" role="status"><i class="loader" />正在載入 OpenStreetMap…</div>
               </template>
@@ -182,9 +195,9 @@ onBeforeUnmount(() => panelObserver?.disconnect())
               <article v-if="selected" :key="selected.id" class="selected-story">
                 <button class="close-story" aria-label="關閉摘要" @click="selected = null">×</button>
                 <DollAvatar :src="selected.avatar" :preset="selected.avatarPreset" :alt="`${selected.nickname}頭像`" size="large" />
-                <span class="county-chip">{{ selected.county }}</span>
+                <span class="county-chip">{{ countryFlag(selected.countryCode) }} {{ placeLabel(selected) }}</span>
                 <h3>{{ selected.location }}</h3>
-                <p>「{{ selected.message }}」</p>
+                <p>{{ markdownToPlainText(selected.message, 140) }}</p>
                 <div class="selected-author">{{ selected.nickname }} 與 {{ selected.dollName }}<span>·</span>{{ formatDate(selected.visitedAt) }}</div>
                 <NuxtLink class="primary-button compact" :to="`/checkins/${selected.id}`">閱讀完整故事 <span aria-hidden="true">→</span></NuxtLink>
               </article>
@@ -229,7 +242,7 @@ onBeforeUnmount(() => panelObserver?.disconnect())
             <button type="button" class="cta-ghost-button" @click="scrollToPanel(1)"><span aria-hidden="true">↑</span> 先逛逛地圖</button>
           </div>
           <p class="cta-footnote">
-            目前收藏 <strong>{{ checkins.length }}</strong> 則旅箋 · 走過 <strong>{{ availableCounties.length }}</strong> 個縣市 · 留下 <strong>{{ totalComments }}</strong> 份交流
+            目前收藏 <strong>{{ checkins.length }}</strong> 則旅箋 · 走過 <strong>{{ availableCountries.length }}</strong> 個國家 · 留下 <strong>{{ totalComments }}</strong> 份交流
           </p>
         </div>
         <div class="cta-doodle right panel-enter from-right" aria-hidden="true">✦</div>

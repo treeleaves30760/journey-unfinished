@@ -25,7 +25,8 @@ interface AdminStatsResponse {
     daily: Array<{ date: string, newCheckins: number, newUsers: number }>
     weekly: Array<{ weekStart: string, newCheckins: number, newUsers: number }>
   }
-  countyDistribution: Array<{ county: string, count: number }>
+  countyDistribution: Array<{ county: string, countryCode: string, count: number }>
+  countryDistribution: Array<{ countryCode: string, count: number }>
   topAuthors: Array<{ userId: number, displayName: string, avatarUrl: string | null, checkinCount: number }>
   recentActivity: {
     checkins: Array<{ id: number, location: string, county: string, createdAt: string }>
@@ -54,6 +55,7 @@ function statsRequest(token?: string): TestEvent {
 const baseCheckin: CheckinInput = {
   nickname: '測試旅人',
   location: '測試景點',
+  countryCode: 'TW',
   county: '臺北市',
   latitude: 25.033,
   longitude: 121.5654,
@@ -210,6 +212,7 @@ describe('空資料庫：每一項聚合都要能處理 0 筆', () => {
     // 在 0 筆時都不會噴錯、也不會回傳 undefined／NaN。
     expect(response.totals).toEqual({ checkins: 0, checkinsWithPhoto: 0, users: 1, comments: 0 })
     expect(response.countyDistribution).toEqual([])
+    expect(response.countryDistribution).toEqual([])
     expect(response.topAuthors).toEqual([])
     expect(response.recentActivity.checkins).toEqual([])
     expect(response.recentActivity.comments).toEqual([])
@@ -298,14 +301,21 @@ describe('有資料時：各項聚合數字與時間序列都要正確', () => {
     expect(response.totals).toEqual({ checkins: 7, checkinsWithPhoto: 3, users: 4, comments: 3 })
   })
 
-  it('縣市分布依數量遞減排序，數量相同時依縣市名稱遞增排序', async () => {
+  it('地區分布依數量遞減排序，數量相同時依地區名稱遞增排序', async () => {
     const { response } = await populatedContext()
+    // 全球化之後同名的行政區可能出現在不同國家，因此以「國家 + 地區」分組，
+    // 並帶出 country_code 讓管理頁能把它們分開顯示。
     expect(response.countyDistribution).toEqual([
-      { county: '臺北市', count: 3 },
-      { county: '花蓮縣', count: 2 },
-      { county: '南投縣', count: 1 }, // 與高雄市同分，縣市名稱遞增排序下 南投縣 在前
-      { county: '高雄市', count: 1 }
+      { county: '臺北市', countryCode: 'TW', count: 3 },
+      { county: '花蓮縣', countryCode: 'TW', count: 2 },
+      { county: '南投縣', countryCode: 'TW', count: 1 }, // 與高雄市同分，地區名稱遞增排序下 南投縣 在前
+      { county: '高雄市', countryCode: 'TW', count: 1 }
     ])
+  })
+
+  it('國家分布獨立成一份聚合', async () => {
+    const { response } = await populatedContext()
+    expect(response.countryDistribution).toEqual([{ countryCode: 'TW', count: 7 }])
   })
 
   it('最活躍作者排除無主旅箋與零旅箋的會員，同分依會員編號排序', async () => {

@@ -54,7 +54,13 @@ async function removeCheckin() {
   }
 }
 
-useHead(() => ({ title: data.value ? `${data.value.checkin.location}｜未完旅箋` : '沿途旅箋｜未完旅箋' }))
+// meta description 要的是純文字：原始 Markdown 的 ## 與 ** 會原封不動出現在搜尋結果與分享預覽裡。
+useHead(() => ({
+  title: data.value ? `${data.value.checkin.location}｜未完旅箋` : '沿途旅箋｜未完旅箋',
+  meta: data.value
+    ? [{ name: 'description', content: markdownToPlainText(data.value.checkin.message, 150) }]
+    : []
+}))
 </script>
 
 <template>
@@ -72,11 +78,13 @@ useHead(() => ({ title: data.value ? `${data.value.checkin.location}｜未完旅
         </div>
         <div class="detail-copy">
           <span class="eyebrow">A PAGE ALONG THE WAY</span>
-          <span class="county-chip">{{ data.checkin.county }}</span>
+          <span class="county-chip">{{ countryFlag(data.checkin.countryCode) }} {{ placeLabel(data.checkin) }}</span>
           <h1>{{ data.checkin.location }}</h1>
           <div class="detail-author"><DollAvatar :src="data.checkin.avatar" :preset="data.checkin.avatarPreset" :alt="`${data.checkin.nickname}的頭像`" size="medium" /><div><strong>{{ data.checkin.nickname }} 與 {{ data.checkin.dollName }}</strong><time :datetime="data.checkin.visitedAt">{{ formatDate(data.checkin.visitedAt) }}</time></div></div>
-          <blockquote>「{{ data.checkin.message }}」</blockquote>
-          <dl class="detail-facts"><div><dt>旅行地點</dt><dd>{{ data.checkin.county }}・{{ data.checkin.location }}</dd></div><div><dt>地圖座標</dt><dd>{{ data.checkin.latitude.toFixed(5) }}, {{ data.checkin.longitude.toFixed(5) }}</dd></div><div v-if="data.checkin.series"><dt>作品出處</dt><dd>{{ data.checkin.series }}</dd></div></dl>
+          <!-- 旅途留言支援 Markdown。MarkdownView 全程用 h() 產生節點，不經過 v-html，
+               所以留言裡的 HTML 只會被當成文字顯示（詳見 utils/markdown.ts 的說明）。 -->
+          <MarkdownView class="detail-message" :source="data.checkin.message" />
+          <dl class="detail-facts"><div><dt>旅行地點</dt><dd>{{ countryName(data.checkin.countryCode) }}・{{ data.checkin.county }}・{{ data.checkin.location }}</dd></div><div><dt>地圖座標</dt><dd>{{ data.checkin.latitude.toFixed(5) }}, {{ data.checkin.longitude.toFixed(5) }}</dd></div><div v-if="data.checkin.series"><dt>作品出處</dt><dd>{{ data.checkin.series }}</dd></div></dl>
           <div v-if="canDelete" class="form-submit">
             <div v-if="deleteError" class="inline-error" role="alert">{{ deleteError }}</div>
             <p v-else>刪除後，這頁的照片與地點座標會一併從網站上移除，且無法復原。</p>

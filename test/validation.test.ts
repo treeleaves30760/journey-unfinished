@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { assertUniqueComment, parseId, validateCheckin, validateComment } from '../server/utils/validation'
+import {
+  MAX_MESSAGE_LENGTH, assertUniqueComment, parseId, validateCheckin, validateComment, validateDraft, validateSearchQuery
+} from '../server/utils/validation'
 
 const validCheckin = {
   nickname: '旅人小花',
   location: '大安森林公園',
+  countryCode: 'TW',
   county: '臺北市',
   latitude: '25.033',
   longitude: '121.535',
@@ -25,6 +28,7 @@ describe('validateCheckin', () => {
   it('normalizes a valid check-in', () => {
     expect(validateCheckin({ ...validCheckin, avatarPreset: 'peach' })).toMatchObject({
       nickname: '旅人小花',
+      countryCode: 'TW',
       county: '臺北市',
       latitude: 25.033,
       longitude: 121.535,
@@ -32,13 +36,37 @@ describe('validateCheckin', () => {
     })
   })
 
-  it('rejects coordinates outside Taiwan', () => {
-    expect(() => validateCheckin({ ...validCheckin, latitude: '35' })).toThrowError()
+  // 全球化之後座標範圍就是整顆地球。這裡釘住的是「邊界值可用、超出邊界擋下」，
+  // 而不是任何一個國家的範圍——把地圖鎖在臺灣，就等於把海外旅箋鎖在畫面外。
+  it('accepts coordinates anywhere on earth and rejects impossible ones', () => {
+    const iceland = { ...validCheckin, avatarPreset: 'peach', countryCode: 'IS', county: 'Suðurland' }
+    expect(validateCheckin({ ...iceland, latitude: '63.4056', longitude: '-19.0448' })).toMatchObject({
+      latitude: 63.4056, longitude: -19.0448, countryCode: 'IS'
+    })
+    expect(validateCheckin({ ...iceland, latitude: '-90', longitude: '180' })).toMatchObject({ latitude: -90, longitude: 180 })
+    expect(() => validateCheckin({ ...iceland, latitude: '90.1' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...iceland, longitude: '-180.1' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...iceland, latitude: 'NaN' })).toThrow(badRequest)
   })
 
-  it('rejects unknown counties and avatar presets', () => {
-    expect(() => validateCheckin({ ...validCheckin, county: '不存在縣市' })).toThrowError()
-    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'javascript:alert(1)' })).toThrowError()
+  it('rejects unknown country codes and avatar presets', () => {
+    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'peach', countryCode: 'ZZ' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'peach', countryCode: '' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'javascript:alert(1)' })).toThrow(badRequest)
+  })
+
+  it('accepts a lowercase country code and normalizes it', () => {
+    expect(validateCheckin({ ...validCheckin, avatarPreset: 'peach', countryCode: 'jp', county: '京都府' }))
+      .toMatchObject({ countryCode: 'JP', county: '京都府' })
+  })
+
+  // 地區不再是臺灣 22 縣市的列舉：世界上沒有一份「所有國家的一級行政區」清單值得內建，
+  // 所以它走的是與其他自由文字相同的衛生檢查——有長度上限，但不限制內容。
+  it('takes any region name within the length limit', () => {
+    expect(validateCheckin({ ...validCheckin, avatarPreset: 'peach', countryCode: 'IS', county: 'Suðurland' }).county)
+      .toBe('Suðurland')
+    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'peach', county: '' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'peach', county: 'a'.repeat(41) })).toThrow(badRequest)
   })
 })
 
@@ -68,6 +96,23 @@ describe('validateCheckin 內容衛生', () => {
     expect(() => validateCheckin({ ...okCheckin, message: `第一段${chars(0x000D)}第二段` })).toThrow(badRequest)
   })
 
+  // multipart 表單送出時，瀏覽器會依 HTML 規格把換行正規化成 CRLF。少了這一步，
+  // 使用者在 textarea 按下的每一次 Enter 都會讓整篇旅箋被擋成 400 ——
+  // 支援 Markdown 之後幾乎每一則留言都是多行的。
+  it('accepts the CRLF line endings that multipart forms actually send', () => {
+    expect(validateCheckin({ ...okCheckin, message: '第一段\r\n第二段' }).message).toBe('第一段\n第二段')
+    expect(validateCheckin({ ...okCheckin, message: '## 小標\r\n\r\n- 項目一\r\n- 項目二' }).message)
+      .toBe('## 小標\n\n- 項目一\n- 項目二')
+    // 長度在收斂之後才量：同一段文字不該因為傳輸編碼多算了一半的字數而被判超長
+    const line = 'a'.repeat(999)
+    expect(validateCheckin({ ...okCheckin, message: `${line}\r\n${line}` }).message).toHaveLength(1_999)
+  })
+
+  it('still refuses a lone carriage return in single-line fields', () => {
+    // 單獨的 \r 不是任何平台的換行，只會被拿來偽造日誌行或製造假排版
+    expect(() => validateCheckin({ ...okCheckin, nickname: `旅人${chars(0x000D)}${chars(0x000A)}小花` })).toThrow(badRequest)
+  })
+
   it('does not kill ZWJ emoji sequences', () => {
     const zwjFamily = `👩${chars(0x200D)}💻`
     expect(validateCheckin({ ...okCheckin, dollName: zwjFamily }).dollName).toBe(zwjFamily)
@@ -90,12 +135,20 @@ describe('validateCheckin 內容衛生', () => {
   })
 
   it('measures message length after composing to NFC', () => {
-    // 250 個 'e' + U+0301 在 JS 裡是 500 個 UTF-16 單位，正規化後只有 250 個字元。
-    // 不正規化就會被誤判成剛好卡在 500 上限，正規化後才能再多寫 250 字。
-    const decomposed = `e${chars(COMBINING_ACUTE)}`.repeat(250)
-    expect(validateCheckin({ ...okCheckin, message: decomposed }).message).toHaveLength(250)
-    expect(() => validateCheckin({ ...okCheckin, message: `e${chars(COMBINING_ACUTE)}`.repeat(501) }))
+    // 2000 個 'e' + U+0301 在 JS 裡是 4000 個 UTF-16 單位，正規化後剛好卡在上限。
+    // 不正規化就會被誤判成超過上限兩倍，永遠通不過。
+    const decomposed = `e${chars(COMBINING_ACUTE)}`.repeat(MAX_MESSAGE_LENGTH)
+    expect(validateCheckin({ ...okCheckin, message: decomposed }).message).toHaveLength(MAX_MESSAGE_LENGTH)
+    expect(() => validateCheckin({ ...okCheckin, message: `e${chars(COMBINING_ACUTE)}`.repeat(MAX_MESSAGE_LENGTH + 1) }))
       .toThrow(badRequest)
+  })
+
+  // 旅途留言支援 Markdown 之後，這些符號就是一般內容而不是可疑輸入，一定要照原樣存下來。
+  // 真正的安全防線在渲染端（utils/markdown.ts 產生資料樹、MarkdownView 用 h() 渲染，
+  // 全程沒有 v-html），所以這裡刻意不對標記符號做任何過濾或跳脫。
+  it('keeps markdown syntax in the message verbatim', () => {
+    const markdown = '## 竹林的清晨\n\n- 記得帶**廣角鏡**\n- 回程繞去渡月橋\n\n> 下次想在秋天再來一次。'
+    expect(validateCheckin({ ...okCheckin, message: markdown }).message).toBe(markdown)
   })
 })
 
@@ -122,6 +175,53 @@ describe('validateCheckin series 欄位（選填）', () => {
     expect(validateCheckin({ ...okCheckin, series: decomposed }).series).toHaveLength(60)
     expect(() => validateCheckin({ ...okCheckin, series: `e${chars(COMBINING_ACUTE)}`.repeat(61) }))
       .toThrow(badRequest)
+  })
+})
+
+// 草稿是「還沒寫完的旅箋」：每個欄位都可以缺席，但只要有填就套用與正式旅箋相同的規則。
+// 這條界線很重要——草稿最後會原封不動地送進 validateCheckin 發佈，在這裡放水等於
+// 多開一條沒檢查過的輸入路徑。
+describe('validateDraft', () => {
+  it('accepts a completely empty draft', () => {
+    expect(validateDraft({})).toEqual({
+      nickname: null, location: null, countryCode: null, county: null,
+      latitude: null, longitude: null, dollName: null, series: null,
+      message: null, visitedAt: null, avatarPreset: 'sun'
+    })
+  })
+
+  it('keeps whatever has been filled in so far', () => {
+    expect(validateDraft({
+      location: '嵐山竹林小徑', countryCode: 'jp', county: '京都府',
+      latitude: '35.0169', longitude: '135.6716', avatarPreset: 'leaf'
+    })).toMatchObject({
+      location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
+      latitude: 35.0169, longitude: 135.6716, avatarPreset: 'leaf', message: null
+    })
+  })
+
+  it('applies the same hygiene rules as a published check-in', () => {
+    expect(() => validateDraft({ nickname: `旅人${chars(0x200B)}小花` })).toThrow(badRequest)
+    expect(() => validateDraft({ location: 'https://spam.example/a' })).toThrow(badRequest)
+    expect(() => validateDraft({ message: 'a'.repeat(MAX_MESSAGE_LENGTH + 1) })).toThrow(badRequest)
+    expect(() => validateDraft({ countryCode: 'ZZ' })).toThrow(badRequest)
+    expect(() => validateDraft({ latitude: '91' })).toThrow(badRequest)
+    expect(() => validateDraft({ visitedAt: '2099-01-01' })).toThrow(badRequest)
+    expect(() => validateDraft({ avatarPreset: 'javascript:alert(1)' })).toThrow(badRequest)
+  })
+})
+
+// 關鍵字不會被存起來，但會原樣送去第三方地理編碼服務，所以套用同一套衛生規則。
+describe('validateSearchQuery', () => {
+  it('trims and normalizes a usable keyword', () => {
+    expect(validateSearchQuery('  東京晴空塔  ')).toBe('東京晴空塔')
+  })
+
+  it('rejects too short, too long, hidden-character and link-shaped keywords', () => {
+    expect(() => validateSearchQuery('東')).toThrow(badRequest)
+    expect(() => validateSearchQuery('a'.repeat(81))).toThrow(badRequest)
+    expect(() => validateSearchQuery(`東京${chars(0x202E)}車站`)).toThrow(badRequest)
+    expect(() => validateSearchQuery('https://spam.example')).toThrow(badRequest)
   })
 })
 

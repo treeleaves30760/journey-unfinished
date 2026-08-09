@@ -33,6 +33,7 @@ afterEach(() => {
 const input: CheckinInput = {
   nickname: '測試旅人',
   location: '測試景點',
+  countryCode: 'TW',
   county: '臺北市',
   latitude: 25.033,
   longitude: 121.5654,
@@ -49,17 +50,21 @@ describe('SQLite schema and migrations', () => {
     const database = await loadDatabase(filename)
     const db = database.getDatabase()
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map(row => row.name)
-    expect(tables).toEqual(expect.arrayContaining(['app_meta', 'users', 'checkins', 'comments', 'auth_sessions']))
+    expect(tables).toEqual(expect.arrayContaining(['app_meta', 'users', 'checkins', 'comments', 'auth_sessions', 'checkin_drafts']))
     const indexes = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{ name: string }>).map(row => row.name)
-    expect(indexes).toEqual(expect.arrayContaining(['idx_comments_checkin', 'idx_checkins_user', 'idx_auth_sessions_expiry']))
+    expect(indexes).toEqual(expect.arrayContaining([
+      'idx_comments_checkin', 'idx_checkins_user', 'idx_auth_sessions_expiry', 'idx_checkin_drafts_user'
+    ]))
 
     const checkinForeignKey = db.prepare('PRAGMA foreign_key_list(checkins)').all() as Array<{ from: string, on_delete: string }>
     const commentForeignKey = db.prepare('PRAGMA foreign_key_list(comments)').all() as Array<{ from: string, on_delete: string }>
     expect(checkinForeignKey).toContainEqual(expect.objectContaining({ from: 'user_id', on_delete: 'SET NULL' }))
     expect(commentForeignKey).toContainEqual(expect.objectContaining({ from: 'checkin_id', on_delete: 'CASCADE' }))
     const checkinColumnNames = (db.prepare('PRAGMA table_info(checkins)').all() as Array<{ name: string }>).map(column => column.name)
-    expect(checkinColumnNames).toEqual(expect.arrayContaining(['user_id', 'series']))
-    expect(database.listCheckins()).toHaveLength(6)
+    expect(checkinColumnNames).toEqual(expect.arrayContaining(['user_id', 'series', 'country_code']))
+    expect(database.listCheckins()).toHaveLength(8)
+    // 示範資料刻意跨到臺灣以外，全新安裝一打開就看得出地圖是全球的
+    expect(new Set(database.listCheckins().map(checkin => checkin.countryCode))).toEqual(new Set(['TW', 'JP', 'IS']))
     const firstId = Math.min(...database.listCheckins().map(checkin => checkin.id))
     expect(database.listComments(firstId)).toHaveLength(1)
     expect(database.listCheckins().every(checkin => checkin.userId === null)).toBe(true)
@@ -102,21 +107,93 @@ describe('SQLite schema and migrations', () => {
       );
       INSERT INTO checkins (nickname, location, county, latitude, longitude, doll_name, message, visited_at)
       VALUES ('舊旅人', '舊景點', '臺北市', 25.03, 121.56, '舊娃', '保留這筆資料', '2025-01-01');
+      INSERT INTO comments (checkin_id, nickname, message) VALUES (1, '舊訪客', '這則留言不可以在遷移中消失');
     `)
     legacy.close()
 
     const database = await loadDatabase(filename)
     const records = database.listCheckins()
     expect(records).toHaveLength(1)
-    // series 是這次遷移新加的欄位，舊資料列理所當然沒填過，必須補成 null 而不是空字串或 undefined。
-    expect(records[0]).toMatchObject({ nickname: '舊旅人', location: '舊景點', userId: null, series: null })
+    // series 是後來加的欄位，舊資料列理所當然沒填過，必須補成 null 而不是空字串或 undefined。
+    // country_code 則補成 'TW'：全球化之前的旅箋全都在臺灣，這就是正確答案，不需要人工回填。
+    expect(records[0]).toMatchObject({
+      nickname: '舊旅人', location: '舊景點', userId: null, series: null, countryCode: 'TW'
+    })
     const columns = database.getDatabase().prepare('PRAGMA table_info(checkins)').all() as Array<{ name: string }>
     expect(columns.some(column => column.name === 'user_id')).toBe(true)
     expect(columns.some(column => column.name === 'series')).toBe(true)
+    expect(columns.some(column => column.name === 'country_code')).toBe(true)
+
+    // 提高 message 上限必須整張表重建（SQLite 改不了 CHECK）。重建會 DROP TABLE checkins，
+    // 而 comments 對它有 ON DELETE CASCADE —— 忘了先關閉外鍵，所有留言會被連坐刪光。
+    // 這一行就是守著那個陷阱；同時確認新的 CHECK 真的生效。
+    expect(database.listComments(records[0]!.id)).toHaveLength(1)
+    const definition = (database.getDatabase().prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'checkins'"
+    ).get() as { sql: string }).sql
+    expect(definition).toMatch(/length\(message\)\s+BETWEEN\s+1\s+AND\s+2000/)
+    expect(database.getDatabase().pragma('foreign_key_check')).toEqual([])
+    // 重建會一起丟掉舊索引，getDatabase 必須在遷移之後重新建立它們
+    const indexes = (database.getDatabase().prepare("SELECT name FROM sqlite_master WHERE type = 'index'")
+      .all() as Array<{ name: string }>).map(row => row.name)
+    expect(indexes).toEqual(expect.arrayContaining(['idx_checkins_user']))
     expect(database.getDatabase().prepare("SELECT value FROM app_meta WHERE key = 'demo_seeded'").get()).toEqual({ value: 'legacy' })
 
     database.closeDatabaseForTests()
     expect(database.listCheckins()).toHaveLength(1)
+  })
+
+  it('leaves an already-migrated database untouched on the next boot', async () => {
+    const filename = temporaryDatabase()
+    const first = await loadDatabase(filename)
+    const before = (first.getDatabase().prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'checkins'"
+    ).get() as { sql: string }).sql
+    const ids = first.listCheckins().map(checkin => checkin.id)
+
+    // 第二次開同一個檔案不該再重建一次表格：重建是有成本、也有風險的動作，
+    // 只有「定義還是舊的」才做。id 保持不變即代表資料列沒有被重新插入過。
+    const second = await loadDatabase(filename)
+    const after = (second.getDatabase().prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'checkins'"
+    ).get() as { sql: string }).sql
+    expect(after).toBe(before)
+    expect(second.listCheckins().map(checkin => checkin.id)).toEqual(ids)
+  })
+
+  it('stores drafts per user and cascades them away with the account', async () => {
+    const database = await loadDatabase(temporaryDatabase())
+    const owner = database.upsertDiscordUser({
+      discordId: '623456789012345678', username: 'drafter', displayName: '草稿作者', avatarUrl: null
+    })
+    const draft = database.createDraft(owner.id, {
+      nickname: null, location: '只拍了照片的地方', countryCode: 'JP', county: '京都府',
+      latitude: 35.0169, longitude: 135.6716, dollName: null, series: null,
+      message: null, visitedAt: null, avatarPreset: 'sun'
+    }, '/uploads/photo-draft.jpg', null)
+
+    expect(draft).toMatchObject({ userId: owner.id, countryCode: 'JP', photo: '/uploads/photo-draft.jpg', message: null })
+    expect(database.listDrafts(owner.id)).toHaveLength(1)
+    expect(database.countDrafts(owner.id)).toBe(1)
+
+    // photo 傳 undefined 代表「保留原圖」：手機存好的照片不該在桌機只改文字時被清掉
+    const updated = database.updateDraft(draft.id, {
+      nickname: '旅人', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
+      latitude: 35.0169, longitude: 135.6716, dollName: '小柚', series: null,
+      message: '## 竹林的清晨', visitedAt: '2025-11-03', avatarPreset: 'leaf'
+    }, undefined, undefined)
+    expect(updated).toMatchObject({ photo: '/uploads/photo-draft.jpg', message: '## 竹林的清晨', avatarPreset: 'leaf' })
+
+    // 明確傳 null 才是「清空」
+    const cleared = database.updateDraft(draft.id, {
+      nickname: '旅人', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
+      latitude: 35.0169, longitude: 135.6716, dollName: '小柚', series: null,
+      message: '## 竹林的清晨', visitedAt: '2025-11-03', avatarPreset: 'leaf'
+    }, null, undefined)
+    expect(cleared?.photo).toBeNull()
+
+    database.getDatabase().prepare('DELETE FROM users WHERE id = ?').run(owner.id)
+    expect(database.listDrafts(owner.id)).toHaveLength(0)
   })
 
   it('continues using the legacy database filename when the renamed default is absent', async () => {
@@ -125,7 +202,7 @@ describe('SQLite schema and migrations', () => {
     new Database(legacyFilename).close()
 
     const database = await loadDatabase(requestedFilename)
-    expect(database.listCheckins()).toHaveLength(6)
+    expect(database.listCheckins()).toHaveLength(8)
     expect(fs.existsSync(requestedFilename)).toBe(false)
   })
 })

@@ -1,0 +1,195 @@
+# 未完旅箋 — 自架地點搜尋（Photon）
+#
+# 為什麼是 Photon 而不是 Nominatim：
+#   Nominatim 全球版要 1TB 以上磁碟、128GB RAM，匯入本身要跑約 2.5 天。
+#   Photon 直接下載 GraphHopper 預建好的索引（全球約 57 GiB 壓縮 / 95 GB 解開後），
+#   不需要任何匯入步驟，而且它本來就是拿 Nominatim 的資料建出來的，資料來源一致。
+#
+# 換來的代價（決定採用前請確認可以接受）：
+#   Photon 的 lang 參數只支援 default/de/en/fr —— **沒有中文**。這裡一律用 lang=default，
+#   也就是 OSM 的 name 標籤（當地語言）：臺灣的地名是中文、日本是日文、冰島是冰島文。
+#   對旅遊紀錄來說看到的就是招牌上的名字，通常反而更貼近現場；但「行政區」欄位會是
+#   當地語言，使用者可以在表單裡自己改。國家名稱不受影響 —— 那是由 utils/countries.ts
+#   依國碼推導的，跟上游無關。
+#
+# 套用方式（在 NAS 上）：
+#   ./deploy/k3s/scripts/deploy-geocoder.sh
+#
+# 這份 manifest 與應用程式解耦：不部署它，應用會照舊使用公用的 Nominatim。
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: geocoder
+  labels:
+    app.kubernetes.io/name: photon
+    # baseline 而不是 restricted：這個映像的 entrypoint 需要以 root 起步，
+    # 把資料目錄 chown 給 PUID/PGID=9011 之後才降權執行 Photon 本身。
+    # restricted 會要求 runAsNonRoot，容器會在第一步就起不來。
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+---
+# 全球索引。local-path 是 k3s 內建的預設 StorageClass，實際落在
+# /var/lib/rancher/k3s/storage/<pvc>/ —— 也就是 NAS 的系統碟，請先確認容量。
+# 注意：local-path 不會真的強制配額，這個數字是給人看的，不是給核心看的。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: photon-data
+  namespace: geocoder
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: ${PHOTON_DATA_SIZE}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: photon
+  namespace: geocoder
+  labels:
+    app.kubernetes.io/name: photon
+spec:
+  replicas: 1
+  # 索引是 ReadWriteOnce 的單一磁碟，兩個 pod 不能同時掛載；滾動更新會卡在
+  # 「新 pod 等舊 pod 放開磁碟」，所以直接用 Recreate。
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: photon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: photon
+    spec:
+      containers:
+        - name: photon
+          image: ${PHOTON_IMAGE}
+          ports:
+            - name: http
+              containerPort: 2322
+          env:
+            # planet = 全球。國家別的 extract 在上游已經停止更新（最後一版是 2025-07），
+            # 全球版則是每週重建，所以即使只想搜臺灣也該用 planet。
+            - name: REGION
+              value: planet
+            # db = 直接下載預建索引（不必自己跑匯入）
+            - name: IMPORT_MODE
+              value: db
+            # 索引每週重建。PARALLEL 會先在旁邊下載新索引、好了再切換，
+            # 代價是切換前需要兩份索引的空間；SEQUENTIAL 省空間但更新期間查不到東西。
+            - name: UPDATE_STRATEGY
+              value: ${PHOTON_UPDATE_STRATEGY}
+            - name: UPDATE_INTERVAL
+              value: ${PHOTON_UPDATE_INTERVAL}
+            # JVM 堆疊。Photon 主要靠作業系統的 page cache 讀索引，堆疊不需要很大；
+            # 把記憶體留給 page cache 反而更快。
+            - name: JAVA_PARAMS
+              value: -Xmx${PHOTON_HEAP}
+            - name: LOG_LEVEL
+              value: INFO
+          volumeMounts:
+            - name: data
+              mountPath: /photon/data
+          # 第一次啟動要下載並解開數十 GB，這段期間容器是活著但還不能服務。
+          # startupProbe 給足夠長的寬限期（預設 12 小時），期間 liveness 不會介入，
+          # 才不會發生「下載到一半被 kubelet 殺掉、重來、永遠下載不完」。
+          startupProbe:
+            httpGet:
+              path: /status
+              port: http
+            periodSeconds: 30
+            failureThreshold: ${PHOTON_STARTUP_FAILURES}
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: http
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1Gi
+            limits:
+              cpu: "8"
+              memory: ${PHOTON_MEMORY_LIMIT}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              # entrypoint 需要 chown 資料目錄再降權，因此保留 CHOWN/SETUID/SETGID，
+              # 其餘一律丟掉。
+              drop: [ALL]
+              add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: photon-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: photon
+  namespace: geocoder
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: photon
+  ports:
+    - name: http
+      port: 2322
+      targetPort: http
+---
+# 這個服務只給叢集內的旅箋應用用，不對外開放，也不開 NodePort。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: photon-default-deny
+  namespace: geocoder
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: journey-unfinished
+      ports:
+        - protocol: TCP
+          port: 2322
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # 下載索引需要對外 HTTPS。與應用一樣排除 RFC1918，避免這個 pod 被拿來
+    # 當跳板打 NAS 上其他服務。
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
