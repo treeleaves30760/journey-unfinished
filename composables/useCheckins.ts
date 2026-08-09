@@ -3,7 +3,7 @@ export interface Checkin {
   userId: number | null
   nickname: string
   location: string
-  /** ISO 3166-1 alpha-2；顯示名稱一律由 utils/countries.ts 的 countryName 推導 */
+  /** ISO 3166-1 alpha-2；介面上稱為「區域」，顯示名稱由 utils/countries.ts 的 regionName 推導 */
   countryCode: string
   /** 次級行政區：臺灣是縣市、日本是都道府縣、法國是大區 */
   county: string
@@ -60,20 +60,23 @@ export const avatarChoices = [
   { id: 'peach', label: '蜜桃', face: '♥' }
 ]
 
-// 臺灣的縣市清單。全球化之後「地區」欄位本身是自由文字（世界上沒有一份值得內建的
-// 全球一級行政區清單），這份清單只在國家選到臺灣時當成下拉選項，維持既有資料的一致寫法。
+// 臺灣的縣市清單。全球化之後「行政區」欄位本身是自由文字（世界上沒有一份值得內建的
+// 全球一級行政區清單），這份清單只在區域選到臺灣時當成下拉選項，維持既有資料的一致寫法。
 export const counties = [
   '基隆市', '臺北市', '新北市', '桃園市', '新竹市', '新竹縣', '苗栗縣',
   '臺中市', '彰化縣', '南投縣', '雲林縣', '嘉義市', '嘉義縣', '臺南市',
   '高雄市', '屏東縣', '宜蘭縣', '花蓮縣', '臺東縣', '澎湖縣', '金門縣', '連江縣'
 ]
 
-/** 「🇯🇵 日本・京都府」這種一眼看得出在哪裡的地點標籤，卡片、地圖側欄與詳情頁共用。 */
+/**
+ * 「日本・京都府」這種一眼看得出在哪裡的地點標籤，卡片、地圖側欄與詳情頁共用。
+ * 刻意不加國旗 emoji —— 國旗是最強烈的主權符號，而這個站要說的只是「去過哪裡」。
+ */
 export function placeLabel(checkin: Pick<Checkin, 'countryCode' | 'county'>) {
-  const country = countryName(checkin.countryCode)
-  if (!checkin.county) return country
-  // 臺灣的縣市名稱本身已經夠明確，再冠一次國名只是雜訊
-  return checkin.countryCode === 'TW' ? checkin.county : `${country}・${checkin.county}`
+  const region = regionName(checkin.countryCode)
+  if (!checkin.county) return region
+  // 臺灣的縣市名稱本身已經夠明確，再冠一次上層區域只是雜訊
+  return checkin.countryCode === 'TW' ? checkin.county : `${region}・${checkin.county}`
 }
 
 export function avatarClass(preset: string) {

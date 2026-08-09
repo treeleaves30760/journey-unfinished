@@ -113,10 +113,10 @@ export default defineEventHandler((event) => {
   ).all() as DayCount[])
   const timeSeries = buildTimeSeries(checkinsByDay, usersByDay, taipeiDateString(Date.now()))
 
-  // 地區分布是類別排行，不是連續時間軸，沒有「缺口扭曲」的問題——沒有旅箋的地區
+  // 行政區分布是類別排行，不是連續時間軸，沒有「缺口扭曲」的問題——沒有旅箋的行政區
   // 本來就該從長條圖裡消失，硬塞 0 值長條反而製造視覺雜訊，所以這裡不做零值補齊。
-  // 全球化之後 county 可能是任何國家的行政區，因此一併帶出 country_code，
-  // 讓管理頁能區分「同名但不同國家」的兩個地區。
+  // 全球化之後 county 可能是任何區域底下的行政區，因此一併帶出 country_code，
+  // 讓管理頁能區分「同名但不同區域」的兩個行政區。
   const countyDistribution = db.prepare(`
     SELECT county, country_code AS countryCode, COUNT(*) AS count
     FROM checkins GROUP BY country_code, county ORDER BY count DESC, county ASC

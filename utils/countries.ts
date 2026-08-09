@@ -1,10 +1,16 @@
 /**
- * ISO 3166-1 alpha-2 國家／地區代碼與正體中文名稱，前後端共用。
+ * ISO 3166-1 alpha-2 代碼與正體中文名稱，前後端共用。
+ *
+ * **介面一律稱之為「區域」，不使用「國家」這個字，也不顯示國旗。**
+ * 這是刻意的：這個站要記錄的是「旅伴去過哪裡」，把地點歸類到主權實體不是它的工作，
+ * 而任何一種歸類方式都會踩到某些人的政治立場。資料層沿用 ISO 3166-1 的欄位名稱
+ * （`countryCode`、`country_code`）是因為那就是這份標準的名字，換掉只會讓人看不懂
+ * 資料從哪來；使用者看到的字串則統一由 regionName() 產生。
  *
  * 資料庫只存兩個字母的代碼，顯示名稱一律由這份表推導，理由有三：
  * 1. 名稱是我們自己的字串常數，不是使用者或第三方地理編碼服務送進來的自由文字，
  *    渲染時不必再擔心同形異義字或隱藏字元。
- * 2. 同一個國家不會因為 Nominatim 回「日本」、使用者手打「Japan」而在篩選器裡分裂成兩項。
+ * 2. 同一個區域不會因為上游回「日本」、使用者手打「Japan」而在篩選器裡分裂成兩項。
  * 3. 之後要補其他語系，只要多一張對照表，既有資料完全不用動。
  *
  * 分組純粹是為了讓 <select> 的 optgroup 好找，不代表任何政治或主權立場；
@@ -111,22 +117,15 @@ export const COUNTRY_CODES = new Set(Object.keys(COUNTRY_NAMES))
 export const DEFAULT_COUNTRY_CODE = 'TW'
 
 /**
+ * 介面上顯示的區域名稱。函式名稱刻意叫 regionName 而不是 countryName ——
+ * 使用者看到的一律是「區域」，見檔頭說明。
+ *
  * 未知代碼一律回傳代碼本身，而不是空字串或「未知」：資料庫寫入前一定驗過代碼，
  * 會走到這條路徑的只有「這份表之後被縮減」這種情況，此時顯示 JP 也遠比顯示空白有用。
  */
-export function countryName(code: string | null | undefined) {
+export function regionName(code: string | null | undefined) {
   const normalized = String(code || '').toUpperCase()
   return COUNTRY_NAMES[normalized] || normalized || ''
-}
-
-/**
- * 用區域指示符號（U+1F1E6 起）組出國旗 emoji，不必為了 250 面旗子多帶一份資料或圖檔。
- * 系統沒有對應字型時瀏覽器會顯示兩個字母的方框，仍然讀得出是哪個國家，因此可以安全降級。
- */
-export function countryFlag(code: string | null | undefined) {
-  const normalized = String(code || '').toUpperCase()
-  if (!/^[A-Z]{2}$/.test(normalized)) return ''
-  return String.fromCodePoint(...[...normalized].map(letter => 0x1F1E6 + letter.charCodeAt(0) - 65))
 }
 
 export function isCountryCode(value: unknown): boolean {

@@ -301,9 +301,9 @@ describe('有資料時：各項聚合數字與時間序列都要正確', () => {
     expect(response.totals).toEqual({ checkins: 7, checkinsWithPhoto: 3, users: 4, comments: 3 })
   })
 
-  it('地區分布依數量遞減排序，數量相同時依地區名稱遞增排序', async () => {
+  it('行政區分布依數量遞減排序，數量相同時依名稱遞增排序', async () => {
     const { response } = await populatedContext()
-    // 全球化之後同名的行政區可能出現在不同國家，因此以「國家 + 地區」分組，
+    // 全球化之後同名的行政區可能出現在不同區域，因此以「區域 + 行政區」分組，
     // 並帶出 country_code 讓管理頁能把它們分開顯示。
     expect(response.countyDistribution).toEqual([
       { county: '臺北市', countryCode: 'TW', count: 3 },
@@ -313,7 +313,7 @@ describe('有資料時：各項聚合數字與時間序列都要正確', () => {
     ])
   })
 
-  it('國家分布獨立成一份聚合', async () => {
+  it('區域分布獨立成一份聚合', async () => {
     const { response } = await populatedContext()
     expect(response.countryDistribution).toEqual([{ countryCode: 'TW', count: 7 }])
   })

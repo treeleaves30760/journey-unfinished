@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  COUNTRY_CODES, COUNTRY_GROUPS, COUNTRY_NAMES, countryFlag, countryName, isCountryCode
+  COUNTRY_CODES, COUNTRY_GROUPS, COUNTRY_NAMES, isCountryCode, regionName
 } from '../utils/countries'
 
-describe('國家／地區對照表', () => {
+describe('區域對照表', () => {
   it('never lists the same code twice', () => {
     // 重複的代碼會讓 <select> 出現兩個一樣的選項，也會讓 Object.fromEntries 靜默丟掉其中一筆
     const codes = COUNTRY_GROUPS.flatMap(group => group.countries.map(([code]) => code))
@@ -18,9 +18,9 @@ describe('國家／地區對照表', () => {
   })
 
   it('covers the destinations the seed data and tests rely on', () => {
-    expect(countryName('TW')).toBe('臺灣')
-    expect(countryName('JP')).toBe('日本')
-    expect(countryName('IS')).toBe('冰島')
+    expect(regionName('TW')).toBe('臺灣')
+    expect(regionName('JP')).toBe('日本')
+    expect(regionName('IS')).toBe('冰島')
   })
 
   it('accepts a lowercase code and rejects anything outside the table', () => {
@@ -32,13 +32,14 @@ describe('國家／地區對照表', () => {
 
   it('falls back to the code itself rather than showing a blank', () => {
     // 這份表之後若被縮減，畫面顯示 JP 也遠比顯示空白有用
-    expect(countryName('ZZ')).toBe('ZZ')
-    expect(countryName(null)).toBe('')
+    expect(regionName('ZZ')).toBe('ZZ')
+    expect(regionName(null)).toBe('')
   })
 
-  it('builds flags from regional indicator symbols instead of shipping 250 images', () => {
-    expect(countryFlag('JP')).toBe(String.fromCodePoint(0x1F1EF, 0x1F1F5))
-    expect(countryFlag('tw')).toBe(String.fromCodePoint(0x1F1F9, 0x1F1FC))
-    expect(countryFlag('bad-input')).toBe('')
+  // 介面刻意不顯示國旗：國旗是最強烈的主權符號，而這個站要說的只是「去過哪裡」。
+  // 這條測試守著「不要有人為了好看又把它加回來」。
+  it('exposes no flag helper at all', async () => {
+    const module = await import('../utils/countries')
+    expect(Object.keys(module).some(name => /flag/i.test(name))).toBe(false)
   })
 })

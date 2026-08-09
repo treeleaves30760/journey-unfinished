@@ -24,8 +24,8 @@ function missingFields(draft: Draft) {
 }
 
 function placeText(draft: Draft) {
-  const country = draft.countryCode ? countryName(draft.countryCode) : ''
-  return [country, draft.county, draft.location].filter(Boolean).join('・') || '尚未標記地點'
+  const region = draft.countryCode ? regionName(draft.countryCode) : ''
+  return [region, draft.county, draft.location].filter(Boolean).join('・') || '尚未標記地點'
 }
 
 async function removeDraft(draft: Draft) {

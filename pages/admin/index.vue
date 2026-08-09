@@ -95,8 +95,8 @@ async function toggleRole(item: AdminUser) {
 const filterCounty = ref('')
 /**
  * 地區選單改由實際資料推導，不再列固定的 22 個臺灣縣市：全球化之後這一欄可能是
- * 京都府、Suðurland 或任何國家的行政區，寫死清單只會讓大部分旅箋篩不到。
- * 同時列出國家，讓同名的行政區（世界上不只一個 Santiago）分得開。
+ * 京都府、Suðurland 或任何區域的行政區，寫死清單只會讓大部分旅箋篩不到。
+ * 同時列出所屬區域，讓同名的行政區（世界上不只一個 Santiago）分得開。
  */
 const countyOptions = computed(() => {
   const seen = new Map<string, string>()
@@ -330,9 +330,9 @@ useHead({ title: '管理中心｜未完旅箋' })
 
         <div class="filters admin-filters">
           <label>
-            <span>地區</span>
+            <span>行政區</span>
             <select v-model="filterCounty" :disabled="batchDeleting">
-              <option value="">全部地區</option>
+              <option value="">全部行政區</option>
               <option v-for="option in countyOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </label>
@@ -411,7 +411,7 @@ useHead({ title: '管理中心｜未完旅箋' })
                     @change="toggleRowSelected(item.id)"
                   >
                 </td>
-                <td><strong>{{ item.location }}</strong><small>{{ countryFlag(item.countryCode) }} {{ placeLabel(item) }}</small></td>
+                <td><strong>{{ item.location }}</strong><small>{{ placeLabel(item) }}</small></td>
                 <td><strong>{{ item.dollName }}</strong><small>{{ item.nickname }}</small></td>
                 <td>{{ formatDate(item.visitedAt) }}</td>
                 <!-- 表格欄位窄，顯示 Markdown 原始碼會被 ## 與 ** 占掉大半空間，這裡看的是內容 -->

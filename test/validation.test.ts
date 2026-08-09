@@ -37,7 +37,7 @@ describe('validateCheckin', () => {
   })
 
   // 全球化之後座標範圍就是整顆地球。這裡釘住的是「邊界值可用、超出邊界擋下」，
-  // 而不是任何一個國家的範圍——把地圖鎖在臺灣，就等於把海外旅箋鎖在畫面外。
+  // 而不是任何單一區域的範圍——把地圖鎖在臺灣，就等於把海外旅箋鎖在畫面外。
   it('accepts coordinates anywhere on earth and rejects impossible ones', () => {
     const iceland = { ...validCheckin, avatarPreset: 'peach', countryCode: 'IS', county: 'Suðurland' }
     expect(validateCheckin({ ...iceland, latitude: '63.4056', longitude: '-19.0448' })).toMatchObject({
@@ -60,7 +60,7 @@ describe('validateCheckin', () => {
       .toMatchObject({ countryCode: 'JP', county: '京都府' })
   })
 
-  // 地區不再是臺灣 22 縣市的列舉：世界上沒有一份「所有國家的一級行政區」清單值得內建，
+  // 行政區不再是臺灣 22 縣市的列舉：世界上沒有一份「所有區域的一級行政區」清單值得內建，
   // 所以它走的是與其他自由文字相同的衛生檢查——有長度上限，但不限制內容。
   it('takes any region name within the length limit', () => {
     expect(validateCheckin({ ...validCheckin, avatarPreset: 'peach', countryCode: 'IS', county: 'Suðurland' }).county)

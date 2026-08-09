@@ -83,9 +83,9 @@ function submitSearch() {
 }
 
 /**
- * 反查地址：使用者在地圖上點一個點之後，自動補上國家與行政區。
+ * 反查地址：使用者在地圖上點一個點之後，自動補上區域與行政區。
  * token 用來丟棄過期的回應——連點三個地方時，先發出的請求可能後到，
- * 沒有這道檢查就會用第一個點的國家覆蓋掉第三個點。
+ * 沒有這道檢查就會用第一個點的區域覆蓋掉第三個點。
  */
 async function resolveAddress(latitude: number, longitude: number, fillLocation: boolean) {
   const token = ++reverseToken
@@ -103,8 +103,8 @@ async function resolveAddress(latitude: number, longitude: number, fillLocation:
       location: fillLocation && !props.modelValue.location.trim() ? place.name : props.modelValue.location
     })
   } catch {
-    // 反查失敗不是錯誤狀態：座標已經標好了，國家與地區讓使用者自己選就好
-    if (token === reverseToken) searchNotice.value = '已標好座標，但自動辨識地區失敗，請確認下方的國家與地區。'
+    // 反查失敗不是錯誤狀態：座標已經標好了，區域與行政區讓使用者自己選就好
+    if (token === reverseToken) searchNotice.value = '已標好座標，但自動辨識失敗，請確認下方的區域與行政區。'
   } finally {
     if (token === reverseToken) resolving.value = false
   }

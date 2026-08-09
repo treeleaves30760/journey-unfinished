@@ -14,8 +14,8 @@ const { data, status, error, refresh } = await useFetch<{ checkins: Checkin[] }>
 const checkins = computed(() => data.value?.checkins || [])
 
 const searchTerm = ref('')
-const countryFilter = ref('全部國家')
-const county = ref('全部地區')
+const regionFilter = ref('全部區域')
+const county = ref('全部行政區')
 const sort = ref<'new' | 'old'>('new')
 const selected = ref<Checkin | null>(null)
 const focusTarget = ref<FocusTarget | null>(null)
@@ -46,36 +46,36 @@ const region = {
   maxZoom: 19
 }
 
-const availableCountries = computed(() => [...new Set(checkins.value.map(item => item.countryCode))]
-  .sort((a, b) => countryName(a).localeCompare(countryName(b), 'zh-Hant')))
+const availableRegions = computed(() => [...new Set(checkins.value.map(item => item.countryCode))]
+  .sort((a, b) => regionName(a).localeCompare(regionName(b), 'zh-Hant')))
 const availableCounties = computed(() => [...new Set(checkins.value
-  .filter(item => countryFilter.value === '全部國家' || item.countryCode === countryFilter.value)
+  .filter(item => regionFilter.value === '全部區域' || item.countryCode === regionFilter.value)
   .map(item => item.county))])
 
 const filteredCheckins = computed(() => {
   const needle = normalizeSearchText(searchTerm.value.trim())
   const list = checkins.value.filter((item) => {
-    if (countryFilter.value !== '全部國家' && item.countryCode !== countryFilter.value) return false
-    if (county.value !== '全部地區' && item.county !== county.value) return false
+    if (regionFilter.value !== '全部區域' && item.countryCode !== regionFilter.value) return false
+    if (county.value !== '全部行政區' && item.county !== county.value) return false
     if (!needle) return true
-    return [item.location, item.county, countryName(item.countryCode), item.dollName, item.nickname, item.series]
+    return [item.location, item.county, regionName(item.countryCode), item.dollName, item.nickname, item.series]
       .some(field => field && normalizeSearchText(field).includes(needle))
   })
   return [...list].sort((a, b) => sort.value === 'new' ? b.visitedAt.localeCompare(a.visitedAt) : a.visitedAt.localeCompare(b.visitedAt))
 })
 
 const hasActiveFilters = computed(() =>
-  countryFilter.value !== '全部國家' || county.value !== '全部地區' || searchTerm.value.trim() !== ''
+  regionFilter.value !== '全部區域' || county.value !== '全部行政區' || searchTerm.value.trim() !== ''
 )
 
 function clearFilters() {
-  countryFilter.value = '全部國家'
-  county.value = '全部地區'
+  regionFilter.value = '全部區域'
+  county.value = '全部行政區'
   searchTerm.value = ''
 }
 
-// 換國家時原本選的地區多半不屬於新國家，留著會讓結果永遠是空的
-watch(countryFilter, () => { county.value = '全部地區' })
+// 換區域時原本選的行政區多半不屬於新區域，留著會讓結果永遠是空的
+watch(regionFilter, () => { county.value = '全部行政區' })
 
 // 側欄清單點擊：開啟摘要並讓地圖飛過去。順手在側欄收合時展開它，不然摘要卡片會被
 // 收在寬度 0 的側欄裡，使用者完全看不到剛剛點了什麼。
@@ -189,11 +189,11 @@ async function goHome() {
           <div class="map-sidebar-controls">
             <label class="field search-field">
               <span>搜尋</span>
-              <input v-model.trim="searchTerm" type="search" maxlength="100" placeholder="地點、娃娃名稱、國家或地區…">
+              <input v-model.trim="searchTerm" type="search" maxlength="100" placeholder="地點、娃娃名稱、區域或行政區…">
             </label>
             <div class="filters">
-              <label><span>國家</span><select v-model="countryFilter"><option>全部國家</option><option v-for="code in availableCountries" :key="code" :value="code">{{ countryFlag(code) }} {{ countryName(code) }}</option></select></label>
-              <label><span>地區</span><select v-model="county"><option>全部地區</option><option v-for="item in availableCounties" :key="item">{{ item }}</option></select></label>
+              <label><span>區域</span><select v-model="regionFilter"><option>全部區域</option><option v-for="code in availableRegions" :key="code" :value="code">{{ regionName(code) }}</option></select></label>
+              <label><span>行政區</span><select v-model="county"><option>全部行政區</option><option v-for="item in availableCounties" :key="item">{{ item }}</option></select></label>
               <label><span>排序</span><select v-model="sort"><option value="new">新到舊</option><option value="old">舊到新</option></select></label>
               <button v-if="hasActiveFilters" type="button" class="clear-filter" @click="clearFilters">清除篩選</button>
             </div>
@@ -207,7 +207,7 @@ async function goHome() {
                   <img :src="selected.photo" :alt="`${selected.dollName}在${selected.location}的照片`" loading="lazy">
                 </div>
                 <DollAvatar :src="selected.avatar" :preset="selected.avatarPreset" :alt="`${selected.nickname}頭像`" size="large" />
-                <span class="county-chip">{{ countryFlag(selected.countryCode) }} {{ placeLabel(selected) }}</span>
+                <span class="county-chip">{{ placeLabel(selected) }}</span>
                 <h3>{{ selected.location }}</h3>
                 <small v-if="selected.series" class="card-series">✎ {{ selected.series }}</small>
                 <MarkdownView class="selected-message" :source="selected.message" variant="compact" />
@@ -226,7 +226,7 @@ async function goHome() {
                     <img v-if="item.photo" :src="item.photo" alt="" loading="lazy">
                     <DollAvatar v-else :src="item.avatar" :preset="item.avatarPreset" alt="" size="small" />
                   </span>
-                  <span><strong>{{ countryFlag(item.countryCode) }} {{ placeLabel(item) }} · {{ item.location }}</strong><small>{{ item.dollName }} · {{ formatDate(item.visitedAt) }}</small></span>
+                  <span><strong>{{ placeLabel(item) }} · {{ item.location }}</strong><small>{{ item.dollName }} · {{ formatDate(item.visitedAt) }}</small></span>
                   <i aria-hidden="true">›</i>
                 </button>
                 <p v-if="!filteredCheckins.length" class="map-side-empty">沒有符合條件的旅箋，換個關鍵字或地區看看吧。</p>

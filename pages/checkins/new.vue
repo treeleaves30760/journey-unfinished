@@ -252,10 +252,10 @@ useHead({ title: '寫下這一站｜未完旅箋' })
           </ClientOnly>
           <div class="field-grid two">
             <label class="field">
-              <span>國家／地區 <b>*</b></span>
+              <span>所在區域 <b>*</b></span>
               <select v-model="form.countryCode" required>
                 <optgroup v-for="group in COUNTRY_GROUPS" :key="group.label" :label="group.label">
-                  <option v-for="[code, name] in group.countries" :key="code" :value="code">{{ countryFlag(code) }} {{ name }}</option>
+                  <option v-for="[code, name] in group.countries" :key="code" :value="code">{{ name }}</option>
                 </optgroup>
               </select>
             </label>
@@ -318,7 +318,7 @@ useHead({ title: '寫下這一站｜未完旅箋' })
         <div class="form-progress-head"><div class="progress-orb" :style="{ '--progress': `${completedSteps / 3 * 100}%` }"><strong>{{ completedSteps }}</strong><span>/ 3</span></div><div><span class="eyebrow">PAGE CHECK</span><h2>旅箋完成進度</h2></div></div>
         <ol class="progress-list">
           <li :class="{ complete: stepCompletion[0] }"><span>1</span><div><strong>旅人與娃娃</strong><small>暱稱、娃娃名稱與頭像</small></div></li>
-          <li :class="{ complete: stepCompletion[1] }"><span>2</span><div><strong>旅行地點</strong><small>景點、國家地區與座標</small></div></li>
+          <li :class="{ complete: stepCompletion[1] }"><span>2</span><div><strong>旅行地點</strong><small>景點、區域行政區與座標</small></div></li>
           <li :class="{ complete: stepCompletion[2] }"><span>3</span><div><strong>旅途故事</strong><small>日期、留言與一張照片</small></div></li>
         </ol>
         <div class="privacy-note"><strong>公開分享前請留意</strong><p>照片與精確座標會公開顯示，請避開住家、個資、車牌或未經同意的人臉。</p></div>

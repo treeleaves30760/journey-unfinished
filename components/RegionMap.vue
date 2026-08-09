@@ -30,7 +30,7 @@ const props = withDefaults(defineProps<{
   fitToCheckins?: boolean
 }>(), {
   selectedId: null,
-  // 預設視野是「世界」而不是臺灣：這個站已經收得下任何國家的旅箋，
+  // 預設視野是「世界」而不是臺灣：這個站已經收得下世界任何角落的旅箋，
   // 也因此刻意不設 maxBounds —— 把地圖鎖在臺灣，就等於把海外旅箋鎖在畫面外。
   // 沒有任何旅箋時停在臺灣附近純粹是站點的出身地，有旅箋時 fitToCheckins 會立刻蓋過它。
   region: () => ({

@@ -9,7 +9,7 @@ export interface GeoPlace {
   label: string
   latitude: number
   longitude: number
-  /** 無法對應到 ISO 3166-1 代碼時為 null，由使用者自己選國家 */
+  /** 無法對應到 ISO 3166-1 代碼時為 null，由使用者自己選區域 */
   countryCode: string | null
   /** 次級行政區（縣市／都道府縣／州），拿不到時為 null */
   county: string | null
@@ -156,7 +156,7 @@ async function pace(minIntervalMs: number) {
 }
 
 /**
- * 次級行政區：不同國家、不同上游放的欄位都不一樣（日本在 province/state、美國在 state、
+ * 次級行政區：不同區域、不同上游放的欄位都不一樣（日本在 province/state、美國在 state、
  * 臺灣多半在 city 或 county），依序取第一個有值的。
  */
 function pickRegion(candidates: Array<string | undefined>, countryCode: string | null) {
