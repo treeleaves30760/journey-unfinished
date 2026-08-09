@@ -30,7 +30,13 @@ metadata:
     pod-security.kubernetes.io/enforce-version: latest
 ---
 # 全球索引。local-path 是 k3s 內建的預設 StorageClass，實際落在
-# /var/lib/rancher/k3s/storage/<pvc>/ —— 也就是 NAS 的系統碟，請先確認容量。
+# /var/lib/rancher/k3s/storage/<pvc>/ —— 也就是系統碟，請先確認容量。
+#
+# 刻意用系統碟而不是大容量的 HDD 池：Lucene 查詢是大量的小型隨機讀取，而 RAIDZ 的
+# 隨機讀 IOPS 大約只等於「每個 vdev 一顆碟」，沒命中快取時會慢得很明顯。
+# 真要放 ZFS 的話那個 dataset 至少要 recordsize=16K、compression=lz4、atime=off，
+# 詳見 deploy/k3s/README.md 的「索引要放哪個磁碟」。
+#
 # 注意：local-path 不會真的強制配額，這個數字是給人看的，不是給核心看的。
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -85,8 +91,9 @@ spec:
               value: ${PHOTON_UPDATE_STRATEGY}
             - name: UPDATE_INTERVAL
               value: ${PHOTON_UPDATE_INTERVAL}
-            # JVM 堆疊。Photon 主要靠作業系統的 page cache 讀索引，堆疊不需要很大；
-            # 把記憶體留給 page cache 反而更快。
+            # JVM 堆疊。Lucene 刻意把索引放在 heap 之外的 mmap 檔案裡，靠作業系統的
+            # page cache 提供 —— heap 開大不會快取到索引資料，只會把原本能當快取的記憶體
+            # 吃掉，順便讓 GC 停頓變長。上游說的「建議 64 GB」是系統快取，不是 heap。
             - name: JAVA_PARAMS
               value: -Xmx${PHOTON_HEAP}
             - name: LOG_LEVEL
