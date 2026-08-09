@@ -34,6 +34,7 @@ afterEach(() => {
 const baseFields = {
   nickname: '旅人小花',
   location: '大安森林公園',
+  countryCode: 'TW',
   county: '臺北市',
   latitude: '25.033',
   longitude: '121.535',
@@ -112,6 +113,7 @@ describe('series：從表單驗證到資料庫的完整路徑', () => {
     const legacyInput: CheckinInput = {
       nickname: '舊呼叫端',
       location: '舊景點',
+      countryCode: 'TW',
       county: '臺北市',
       latitude: 25.033,
       longitude: 121.535,

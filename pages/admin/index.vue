@@ -93,6 +93,20 @@ async function toggleRole(item: AdminUser) {
 // ---------------------------------------------------------------------------
 
 const filterCounty = ref('')
+/**
+ * 地區選單改由實際資料推導，不再列固定的 22 個臺灣縣市：全球化之後這一欄可能是
+ * 京都府、Suðurland 或任何國家的行政區，寫死清單只會讓大部分旅箋篩不到。
+ * 同時列出國家，讓同名的行政區（世界上不只一個 Santiago）分得開。
+ */
+const countyOptions = computed(() => {
+  const seen = new Map<string, string>()
+  for (const item of data.value?.checkins || []) {
+    if (!seen.has(item.county)) seen.set(item.county, placeLabel(item))
+  }
+  return [...seen.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'))
+})
 // '' = 全部作者；'unclaimed' = 沒有綁定會員帳號的旅箋（userId 為 null）；其餘為會員 id 的字串形式
 const filterAuthorId = ref('')
 const filterDateFrom = ref('')
@@ -316,10 +330,10 @@ useHead({ title: '管理中心｜未完旅箋' })
 
         <div class="filters admin-filters">
           <label>
-            <span>縣市</span>
+            <span>地區</span>
             <select v-model="filterCounty" :disabled="batchDeleting">
-              <option value="">全部縣市</option>
-              <option v-for="item in counties" :key="item" :value="item">{{ item }}</option>
+              <option value="">全部地區</option>
+              <option v-for="option in countyOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </label>
           <label>
@@ -397,10 +411,11 @@ useHead({ title: '管理中心｜未完旅箋' })
                     @change="toggleRowSelected(item.id)"
                   >
                 </td>
-                <td><strong>{{ item.location }}</strong><small>{{ item.county }}</small></td>
+                <td><strong>{{ item.location }}</strong><small>{{ countryFlag(item.countryCode) }} {{ placeLabel(item) }}</small></td>
                 <td><strong>{{ item.dollName }}</strong><small>{{ item.nickname }}</small></td>
                 <td>{{ formatDate(item.visitedAt) }}</td>
-                <td class="admin-message-cell" :title="item.message">{{ item.message }}</td>
+                <!-- 表格欄位窄，顯示 Markdown 原始碼會被 ## 與 ** 占掉大半空間，這裡看的是內容 -->
+                <td class="admin-message-cell" :title="markdownToPlainText(item.message)">{{ markdownToPlainText(item.message, 120) }}</td>
                 <td class="admin-actions-cell">
                   <div class="admin-row-actions">
                     <NuxtLink class="text-link" :to="`/checkins/${item.id}`">查看</NuxtLink>

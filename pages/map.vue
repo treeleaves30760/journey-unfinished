@@ -14,6 +14,7 @@ const { data, status, error, refresh } = await useFetch<{ checkins: Checkin[] }>
 const checkins = computed(() => data.value?.checkins || [])
 
 const searchTerm = ref('')
+const countryFilter = ref('全部國家')
 const county = ref('全部地區')
 const sort = ref<'new' | 'old'>('new')
 const selected = ref<Checkin | null>(null)
@@ -32,37 +33,49 @@ let compactMediaQuery: MediaQueryList | null = null
 // 使用者會被鎖在收合狀態，因為手機版刻意不重複做第二顆浮動展開按鈕（見樣式表註解）。
 const sidebarInert = computed(() => sidebarCollapsed.value && !isCompactLayout.value)
 
-// 全螢幕頁不套用首頁那組臺灣邊界／縮放限制：這裡刻意不給 bounds（RegionMap 收到 undefined
-// 會直接清掉 Leaflet 的 maxBounds），minZoom 也放寬，讓使用者能像 Google Maps 一樣自由拖曳、
-// 縮到臺灣以外的範圍；maxZoom 19 對齊 RegionMap 內建的 OSM 圖磚上限，再高瀏覽器也拿不到圖磚。
+// 全螢幕頁刻意不給 bounds（RegionMap 收到 undefined 會直接清掉 Leaflet 的 maxBounds），
+// 讓使用者能像 Google Maps 一樣自由拖曳到世界任何角落；實際的初始視野交給 fitToCheckins
+// 依目前的旅箋分佈決定，寫死的中心點在旅箋橫跨兩個半球時沒有意義。
+// maxZoom 19 對齊 RegionMap 內建的 OSM 圖磚上限，再高瀏覽器也拿不到圖磚。
 const region = {
-  id: 'taiwan-explore',
-  label: '臺灣',
+  id: 'world-explore',
+  label: '世界',
   center: [23.72, 121.0] as [number, number],
-  zoom: 8,
-  minZoom: 3,
+  zoom: 3,
+  minZoom: 2,
   maxZoom: 19
 }
 
-const availableCounties = computed(() => [...new Set(checkins.value.map(item => item.county))])
+const availableCountries = computed(() => [...new Set(checkins.value.map(item => item.countryCode))]
+  .sort((a, b) => countryName(a).localeCompare(countryName(b), 'zh-Hant')))
+const availableCounties = computed(() => [...new Set(checkins.value
+  .filter(item => countryFilter.value === '全部國家' || item.countryCode === countryFilter.value)
+  .map(item => item.county))])
 
 const filteredCheckins = computed(() => {
   const needle = normalizeSearchText(searchTerm.value.trim())
   const list = checkins.value.filter((item) => {
+    if (countryFilter.value !== '全部國家' && item.countryCode !== countryFilter.value) return false
     if (county.value !== '全部地區' && item.county !== county.value) return false
     if (!needle) return true
-    return [item.location, item.county, item.dollName, item.nickname, item.series]
+    return [item.location, item.county, countryName(item.countryCode), item.dollName, item.nickname, item.series]
       .some(field => field && normalizeSearchText(field).includes(needle))
   })
   return [...list].sort((a, b) => sort.value === 'new' ? b.visitedAt.localeCompare(a.visitedAt) : a.visitedAt.localeCompare(b.visitedAt))
 })
 
-const hasActiveFilters = computed(() => county.value !== '全部地區' || searchTerm.value.trim() !== '')
+const hasActiveFilters = computed(() =>
+  countryFilter.value !== '全部國家' || county.value !== '全部地區' || searchTerm.value.trim() !== ''
+)
 
 function clearFilters() {
+  countryFilter.value = '全部國家'
   county.value = '全部地區'
   searchTerm.value = ''
 }
+
+// 換國家時原本選的地區多半不屬於新國家，留著會讓結果永遠是空的
+watch(countryFilter, () => { county.value = '全部地區' })
 
 // 側欄清單點擊：開啟摘要並讓地圖飛過去。順手在側欄收合時展開它，不然摘要卡片會被
 // 收在寬度 0 的側欄裡，使用者完全看不到剛剛點了什麼。
@@ -176,9 +189,10 @@ async function goHome() {
           <div class="map-sidebar-controls">
             <label class="field search-field">
               <span>搜尋</span>
-              <input v-model.trim="searchTerm" type="search" maxlength="100" placeholder="地點、娃娃名稱、縣市…">
+              <input v-model.trim="searchTerm" type="search" maxlength="100" placeholder="地點、娃娃名稱、國家或地區…">
             </label>
             <div class="filters">
+              <label><span>國家</span><select v-model="countryFilter"><option>全部國家</option><option v-for="code in availableCountries" :key="code" :value="code">{{ countryFlag(code) }} {{ countryName(code) }}</option></select></label>
               <label><span>地區</span><select v-model="county"><option>全部地區</option><option v-for="item in availableCounties" :key="item">{{ item }}</option></select></label>
               <label><span>排序</span><select v-model="sort"><option value="new">新到舊</option><option value="old">舊到新</option></select></label>
               <button v-if="hasActiveFilters" type="button" class="clear-filter" @click="clearFilters">清除篩選</button>
@@ -193,10 +207,10 @@ async function goHome() {
                   <img :src="selected.photo" :alt="`${selected.dollName}在${selected.location}的照片`" loading="lazy">
                 </div>
                 <DollAvatar :src="selected.avatar" :preset="selected.avatarPreset" :alt="`${selected.nickname}頭像`" size="large" />
-                <span class="county-chip">{{ selected.county }}</span>
+                <span class="county-chip">{{ countryFlag(selected.countryCode) }} {{ placeLabel(selected) }}</span>
                 <h3>{{ selected.location }}</h3>
                 <small v-if="selected.series" class="card-series">✎ {{ selected.series }}</small>
-                <p>「{{ selected.message }}」</p>
+                <MarkdownView class="selected-message" :source="selected.message" variant="compact" />
                 <div class="selected-author">{{ selected.nickname }} 與 {{ selected.dollName }}<span>·</span>{{ formatDate(selected.visitedAt) }}</div>
                 <NuxtLink class="primary-button compact" :to="`/checkins/${selected.id}`">閱讀完整故事 <span aria-hidden="true">→</span></NuxtLink>
               </article>
@@ -212,7 +226,7 @@ async function goHome() {
                     <img v-if="item.photo" :src="item.photo" alt="" loading="lazy">
                     <DollAvatar v-else :src="item.avatar" :preset="item.avatarPreset" alt="" size="small" />
                   </span>
-                  <span><strong>{{ item.county }} · {{ item.location }}</strong><small>{{ item.dollName }} · {{ formatDate(item.visitedAt) }}</small></span>
+                  <span><strong>{{ countryFlag(item.countryCode) }} {{ placeLabel(item) }} · {{ item.location }}</strong><small>{{ item.dollName }} · {{ formatDate(item.visitedAt) }}</small></span>
                   <i aria-hidden="true">›</i>
                 </button>
                 <p v-if="!filteredCheckins.length" class="map-side-empty">沒有符合條件的旅箋，換個關鍵字或地區看看吧。</p>
@@ -235,6 +249,7 @@ async function goHome() {
           :selected-id="selected?.id ?? null"
           :region="region"
           :focus-target="focusTarget"
+          fit-to-checkins
           @select="selectFromMap"
         />
         <template #fallback>

@@ -916,7 +916,12 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 }
 .account-popover > span, .account-popover > small { color: var(--muted); font-size: .7rem; }
 .account-popover > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 .95rem 'Zen Maru Gothic', sans-serif; }
-.account-popover > button { min-height: 38px; margin-top: 13px; color: var(--rose-dark); border: 1px solid #e6b9c2; border-radius: 10px; cursor: pointer; background: var(--rose-soft); font-size: .78rem; font-weight: 800; }
+.account-popover > button { min-height: 38px; margin-top: 9px; color: var(--rose-dark); border: 1px solid #e6b9c2; border-radius: 10px; cursor: pointer; background: var(--rose-soft); font-size: .78rem; font-weight: 800; }
+/* 快速記錄與草稿的入口：手機上這兩頁是主要動線，但站頭放不下更多按鈕，收進帳號選單裡。
+   第一個連結的上緣留白把它和上面的帳號資訊分開，視覺上才不會像同一段文字。 */
+.account-popover > .account-link { display: flex; min-height: 38px; align-items: center; gap: 7px; padding: 0 8px; margin-top: 4px; border-radius: 10px; color: var(--ink); text-decoration: none; font-size: .8rem; font-weight: 700; }
+.account-popover > .account-link:first-of-type { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 4px; }
+.account-popover > .account-link:hover { color: var(--rose-dark); background: var(--rose-soft); }
 
 /* Full-page homepage */
 .home-page {
@@ -1192,3 +1197,335 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 /* 旅箋卡片上的作品出處：只在 checkin.series 有值時才會出現在 DOM 上（v-if），這裡只負責
    它出現時的外觀。卡片寬度固定，單行截斷可避免長作品名稱把心得往下推或撐開卡片。 */
 .card-series { display: block; overflow: hidden; margin: 0 0 8px; color: var(--rose-dark); font-size: .74rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------------------------------------------------------------------------
+   Markdown 顯示
+   旅箋留言與草稿預覽共用。節點由 components/MarkdownView.vue 以 h() 產生，
+   不經過 v-html，因此這裡只需要負責排版，不必為了「消毒後的 HTML」預留任何例外規則。
+   --------------------------------------------------------------------------- */
+.markdown-body { display: grid; gap: 12px; overflow-wrap: anywhere; }
+.markdown-body h2, .markdown-body h3, .markdown-body h4 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-family: 'Zen Maru Gothic', 'Noto Sans TC', sans-serif;
+  line-height: 1.4;
+}
+.markdown-body h2 { font-size: 1.22rem; }
+.markdown-body h3 { font-size: 1.06rem; }
+.markdown-body h4 { font-size: .96rem; }
+.markdown-body p { margin: 0; line-height: 1.85; }
+.markdown-body ul, .markdown-body ol { display: grid; gap: 6px; margin: 0; padding-left: 1.4em; }
+.markdown-body li { line-height: 1.75; }
+.markdown-body blockquote {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--muted);
+  border-left: 3px solid var(--rose);
+  border-radius: 0 14px 14px 0;
+  background: var(--paper-deep);
+}
+.markdown-body code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--paper-deep);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .88em;
+}
+/* 程式碼區塊只在這裡橫向捲動：頁面本身永遠不該因為一段長指令而出現水平捲軸 */
+.markdown-body pre { margin: 0; padding: 14px 16px; overflow-x: auto; border-radius: 14px; background: #f3ece2; }
+.markdown-body pre code { padding: 0; background: none; }
+.markdown-body a { color: var(--rose-dark); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.markdown-body hr { width: 100%; margin: 2px 0; border: 0; border-top: 1px dashed var(--line-strong); }
+.markdown-body > :first-child { margin-top: 0; }
+
+/* 側欄摘要用的緊湊版：字小一點、間距收一點，長篇心得截到六行避免把整個側欄吃掉 */
+.markdown-compact { gap: 8px; font-size: .88rem; }
+.markdown-compact h2 { font-size: 1.02rem; }
+.markdown-compact h3, .markdown-compact h4 { font-size: .94rem; }
+.markdown-compact pre { padding: 10px 12px; font-size: .82rem; }
+.selected-message {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+}
+
+/* 詳情頁的心得是整頁的主角，字級比一般內文再大一點 */
+.detail-message { margin: 18px 0 22px; font-size: 1.02rem; }
+
+/* ---------------------------------------------------------------------------
+   Markdown 編輯器
+   --------------------------------------------------------------------------- */
+.markdown-editor {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: var(--paper-strong);
+}
+.markdown-editor:focus-within { border-color: var(--rose); box-shadow: 0 0 0 4px rgb(217 103 126 / 10%); }
+.markdown-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.markdown-tools { display: flex; gap: 4px; flex-wrap: wrap; }
+.markdown-tools button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  cursor: pointer;
+  background: var(--paper);
+  font-size: .95rem;
+  font-weight: 800;
+}
+.markdown-tools button:hover { color: var(--rose-dark); border-color: var(--line-strong); background: var(--rose-soft); }
+.markdown-modes { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--paper-deep); }
+.markdown-modes button {
+  min-height: 34px;
+  padding: 0 14px;
+  color: var(--muted);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  background: transparent;
+  font-size: .78rem;
+  font-weight: 700;
+}
+.markdown-modes button.active { color: var(--rose-dark); background: var(--paper-strong); box-shadow: var(--shadow-soft); }
+.markdown-panes { display: grid; gap: 10px; }
+.markdown-editor.mode-split .markdown-panes { grid-template-columns: 1fr 1fr; align-items: stretch; }
+.markdown-panes textarea {
+  width: 100%;
+  min-height: 220px;
+  padding: 12px 14px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  outline: none;
+  background: var(--paper);
+  font-size: .92rem;
+  line-height: 1.8;
+  resize: vertical;
+}
+.markdown-preview {
+  min-height: 220px;
+  padding: 13px 15px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 13px;
+  background: var(--paper);
+}
+.markdown-preview-empty { margin: 0; color: var(--muted); font-size: .82rem; }
+.markdown-footer { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.markdown-hint { color: var(--muted); font-size: .72rem; }
+.markdown-hint code { padding: 1px 5px; border-radius: 5px; background: var(--paper-deep); font-size: .95em; }
+.counter.is-over { color: var(--danger); font-weight: 800; }
+
+/* ---------------------------------------------------------------------------
+   地點選擇器（搜尋景點 → 地圖落點 → 反查國家與行政區）
+   --------------------------------------------------------------------------- */
+.location-picker { display: grid; gap: 12px; }
+.picker-search { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.picker-search .field { min-width: 0; flex: 1 1 240px; }
+.picker-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 8px 13px;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  outline: none;
+  background: var(--paper-strong);
+}
+.picker-search input:focus { border-color: var(--rose); box-shadow: 0 0 0 4px rgb(217 103 126 / 10%); }
+.picker-status { display: flex; align-items: center; gap: 4px; margin: 0; color: var(--muted); font-size: .8rem; }
+.picker-status.is-error { color: var(--danger); }
+.loader.small { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; }
+.picker-results {
+  display: grid;
+  max-height: 240px;
+  gap: 2px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper-strong);
+}
+.picker-results button {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  background: transparent;
+  text-align: left;
+}
+.picker-results button:hover { background: var(--rose-soft); }
+.picker-results strong { color: var(--ink); font-size: .92rem; }
+.picker-results small { overflow: hidden; color: var(--muted); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.picker-map, .picker-map-loading {
+  height: 340px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: var(--paper-deep);
+}
+.picker-map-loading { display: grid; place-items: center; color: var(--muted); }
+/* Leaflet 的 divIcon 外殼本身不畫東西，圖釘是裡面那個旋轉 45 度的方圓形 */
+.picker-marker {
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: 0 auto;
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  background: var(--rose);
+  box-shadow: 0 5px 12px rgb(68 48 56 / 38%);
+  transform: rotate(-45deg);
+}
+.picker-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.picker-hint { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: .78rem; }
+.picker-manual { margin-top: 2px; }
+.field-note { margin: 6px 0 0; color: var(--forest-dark); font-size: .76rem; }
+.info-alert { color: var(--forest-dark); border-color: #bbd5c4; background: var(--sage); }
+.form-intro-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+.form-submit-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+
+/* ---------------------------------------------------------------------------
+   手機快速記錄
+   --------------------------------------------------------------------------- */
+.quick-page { width: min(100% - 28px, 720px); margin: 0 auto; padding: 26px 0 96px; }
+.quick-head { display: grid; gap: 6px; margin-bottom: 22px; }
+.quick-head h1 { margin: 4px 0; font-family: 'Zen Maru Gothic', 'Noto Sans TC', sans-serif; font-size: clamp(1.7rem, 5vw, 2.3rem); }
+.quick-head p { margin: 0; color: var(--muted); }
+.quick-step {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--paper-strong);
+  box-shadow: var(--shadow-soft);
+}
+.quick-step h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.02rem; }
+.quick-step h2 span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: #fff;
+  border-radius: 50%;
+  background: var(--rose);
+  font-size: .78rem;
+  font-weight: 800;
+}
+.quick-step h2 small { color: var(--muted); font-size: .74rem; font-weight: 500; }
+/* 拍照是這一頁的主要動作，點擊區給得比一般上傳框更大，站著單手也按得到 */
+.quick-capture { min-height: 200px; }
+.quick-capture.has-preview { min-height: 300px; }
+.quick-actions { display: grid; justify-items: center; gap: 10px; margin-top: 22px; }
+.quick-actions .primary-button { width: 100%; min-height: 54px; font-size: 1rem; }
+.quick-hint { margin: 0; color: var(--muted); font-size: .8rem; text-align: center; }
+.quick-saved {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 34px 22px;
+  text-align: center;
+  border: 1px solid #bbd5c4;
+  border-radius: 24px;
+  background: var(--sage);
+}
+.quick-saved h2 { margin: 0; font-size: 1.3rem; }
+.quick-saved p { margin: 0; color: var(--forest-dark); }
+.quick-saved-actions { display: grid; justify-items: center; gap: 10px; width: min(100%, 320px); margin-top: 8px; }
+.quick-saved-actions .primary-button, .quick-saved-actions .secondary-button { width: 100%; min-height: 48px; }
+
+/* ---------------------------------------------------------------------------
+   草稿列表
+   --------------------------------------------------------------------------- */
+.drafts-page { width: min(100% - 28px, var(--content)); margin: 0 auto; padding: 26px 0 80px; }
+.draft-list { display: grid; gap: 14px; margin: 22px 0 0; padding: 0; list-style: none; }
+.draft-card {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper-strong);
+  box-shadow: var(--shadow-soft);
+}
+.draft-thumb {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-items: center;
+  overflow: hidden;
+  color: var(--line-strong);
+  border-radius: 16px;
+  background: var(--paper-deep);
+  font-size: 1.6rem;
+}
+.draft-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.draft-body { display: grid; min-width: 0; gap: 3px; }
+.draft-body strong { overflow: hidden; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
+.draft-time { color: var(--muted); font-size: .74rem; }
+.draft-excerpt { display: -webkit-box; overflow: hidden; margin: 2px 0 0; color: var(--muted); font-size: .82rem; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.draft-missing { margin: 4px 0 0; color: var(--gold); font-size: .78rem; font-weight: 700; }
+.draft-ready { margin: 4px 0 0; color: var(--forest); font-size: .78rem; font-weight: 700; }
+.draft-actions { display: grid; justify-items: stretch; gap: 6px; }
+
+/* ---------------------------------------------------------------------------
+   手機黏底操作列
+   長表單捲到一半時，「存草稿」與「發佈」永遠停在拇指構得到的位置。桌機版不需要——
+   那裡表單末端的按鈕本來就看得到，多一條浮動列只是遮住內容。
+   --------------------------------------------------------------------------- */
+.mobile-action-bar { display: none; }
+
+@media (max-width: 900px) {
+  .markdown-editor.mode-split .markdown-panes { grid-template-columns: 1fr; }
+  .picker-map, .picker-map-loading { height: 280px; }
+  .draft-card { grid-template-columns: 72px minmax(0, 1fr); }
+  .draft-thumb { width: 72px; height: 72px; }
+  .draft-actions { grid-column: 1 / -1; grid-template-columns: 1fr auto; align-items: center; }
+
+  .mobile-action-bar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 700;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: rgb(255 253 249 / 94%);
+    box-shadow: 0 -10px 28px rgb(56 47 52 / 12%);
+    backdrop-filter: blur(12px);
+  }
+  .mobile-action-bar button { min-height: 48px; }
+  /* 讓出黏底操作列的高度，否則表單最後一段會被永久遮住 */
+  .form-page { padding-bottom: 108px; }
+  /* 手機上表單末端那組按鈕與黏底列重複，收起來避免同一個動作出現兩次 */
+  .form-page .form-submit-actions { display: none; }
+}
+
+@media (max-width: 560px) {
+  .markdown-tools button { width: 38px; height: 38px; }
+  .markdown-panes textarea, .markdown-preview { min-height: 190px; }
+  .picker-search .secondary-button { width: 100%; }
+  .quick-step { padding: 15px; border-radius: 18px; }
+}

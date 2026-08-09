@@ -3,6 +3,9 @@ export interface Checkin {
   userId: number | null
   nickname: string
   location: string
+  /** ISO 3166-1 alpha-2；顯示名稱一律由 utils/countries.ts 的 countryName 推導 */
+  countryCode: string
+  /** 次級行政區：臺灣是縣市、日本是都道府縣、法國是大區 */
   county: string
   latitude: number
   longitude: number
@@ -15,6 +18,30 @@ export interface Checkin {
   avatarPreset: string
   createdAt: string
   commentCount: number
+}
+
+/**
+ * 草稿：手機上拍完照、標好地點就先存起來，回家用電腦打開同一筆繼續寫。
+ * 每個欄位都可能是空的——它就是一則還沒寫完的旅箋。
+ */
+export interface Draft {
+  id: number
+  userId: number
+  nickname: string | null
+  location: string | null
+  countryCode: string | null
+  county: string | null
+  latitude: number | null
+  longitude: number | null
+  dollName: string | null
+  series: string | null
+  message: string | null
+  visitedAt: string | null
+  photo: string | null
+  avatar: string | null
+  avatarPreset: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface CheckinComment {
@@ -33,11 +60,21 @@ export const avatarChoices = [
   { id: 'peach', label: '蜜桃', face: '♥' }
 ]
 
+// 臺灣的縣市清單。全球化之後「地區」欄位本身是自由文字（世界上沒有一份值得內建的
+// 全球一級行政區清單），這份清單只在國家選到臺灣時當成下拉選項，維持既有資料的一致寫法。
 export const counties = [
   '基隆市', '臺北市', '新北市', '桃園市', '新竹市', '新竹縣', '苗栗縣',
   '臺中市', '彰化縣', '南投縣', '雲林縣', '嘉義市', '嘉義縣', '臺南市',
   '高雄市', '屏東縣', '宜蘭縣', '花蓮縣', '臺東縣', '澎湖縣', '金門縣', '連江縣'
 ]
+
+/** 「🇯🇵 日本・京都府」這種一眼看得出在哪裡的地點標籤，卡片、地圖側欄與詳情頁共用。 */
+export function placeLabel(checkin: Pick<Checkin, 'countryCode' | 'county'>) {
+  const country = countryName(checkin.countryCode)
+  if (!checkin.county) return country
+  // 臺灣的縣市名稱本身已經夠明確，再冠一次國名只是雜訊
+  return checkin.countryCode === 'TW' ? checkin.county : `${country}・${checkin.county}`
+}
 
 export function avatarClass(preset: string) {
   return `avatar-${avatarChoices.some(choice => choice.id === preset) ? preset : 'sun'}`

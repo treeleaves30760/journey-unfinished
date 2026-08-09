@@ -20,7 +20,8 @@ async function creationGeometry(page: Page) {
       form: measure('.checkin-form'),
       aside: measure('.form-aside'),
       firstTwoFieldGrid: measure('.field-grid.two'),
-      coordinateButton: measure('.coordinate-heading .secondary-button'),
+      // 「使用目前位置」現在住在 LocationPicker 裡（搜尋框旁邊），不再是第二張卡片標題列上的按鈕
+      locateButton: measure('.picker-search .secondary-button'),
       photoUpload: measure('.upload-drop:not(.compact-upload)'),
       columns: getComputedStyle(document.querySelector('.form-layout')!).gridTemplateColumns,
       fieldColumns: getComputedStyle(document.querySelector('.field-grid.two')!).gridTemplateColumns
@@ -44,6 +45,9 @@ for (const viewport of [
     await page.setViewportSize(viewport)
     await authenticate(context, 'admin')
     await page.goto('/checkins/new')
+    // 地點選擇器包在 <ClientOnly> 裡（Leaflet 只能在瀏覽器跑），量它之前要先等 hydration 完成
+    await waitForHydration(page)
+    await expect(page.locator('.picker-search .secondary-button')).toBeVisible()
     await page.evaluate(() => document.fonts.ready)
     const geometry = await creationGeometry(page)
     const expectedGutter = viewport.width <= 720 ? 14 : viewport.width > 1216 ? (viewport.width - 1180) / 2 : 18
@@ -55,8 +59,8 @@ for (const viewport of [
     expect(geometry.layout.width).toBeCloseTo(geometry.page.width, 0)
     expect(geometry.form.scrollWidth).toBeLessThanOrEqual(geometry.form.width)
     expect(geometry.aside.scrollWidth).toBeLessThanOrEqual(geometry.aside.width)
-    expect(geometry.coordinateButton.x).toBeGreaterThanOrEqual(geometry.form.x)
-    expect(geometry.coordinateButton.right).toBeLessThanOrEqual(geometry.form.right + 1)
+    expect(geometry.locateButton.x).toBeGreaterThanOrEqual(geometry.form.x)
+    expect(geometry.locateButton.right).toBeLessThanOrEqual(geometry.form.right + 1)
     expect(geometry.photoUpload.x).toBeGreaterThanOrEqual(geometry.form.x)
     expect(geometry.photoUpload.right).toBeLessThanOrEqual(geometry.form.right + 1)
 

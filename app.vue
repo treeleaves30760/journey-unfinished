@@ -30,7 +30,7 @@ async function signOut() {
           <NuxtLink v-else class="nav-link nav-cta discord-login" :to="`/login?redirect=${encodeURIComponent(route.fullPath)}`"><span aria-hidden="true">DC</span> 登入</NuxtLink>
           <details v-if="user" class="account-menu">
             <summary :aria-label="`${user.displayName}的帳號選單`"><DollAvatar :src="user.avatarUrl" preset="ocean" alt="" size="small" /></summary>
-            <div class="account-popover"><span>Discord 帳號</span><strong>{{ user.displayName }}</strong><small>@{{ user.username }} · {{ isAdmin ? '管理員' : '會員' }}</small><button type="button" :disabled="loggingOut" @click="signOut">{{ loggingOut ? '登出中…' : '登出' }}</button></div>
+            <div class="account-popover"><span>Discord 帳號</span><strong>{{ user.displayName }}</strong><small>@{{ user.username }} · {{ isAdmin ? '管理員' : '會員' }}</small><NuxtLink class="account-link" to="/checkins/quick"><span aria-hidden="true">⚡</span> 快速記錄</NuxtLink><NuxtLink class="account-link" to="/drafts"><span aria-hidden="true">✎</span> 我的草稿</NuxtLink><button type="button" :disabled="loggingOut" @click="signOut">{{ loggingOut ? '登出中…' : '登出' }}</button></div>
           </details>
         </nav>
       </div>
@@ -42,7 +42,7 @@ async function signOut() {
       <div class="site-footer-inner">
         <div class="footer-brand"><span class="brand-mark small" aria-hidden="true">箋</span><div><strong>未完旅箋</strong><span>小小的你，世界很大。</span></div></div>
         <p>本站示意內容與頭像皆為原創，不含任何角色授權素材。</p>
-        <nav aria-label="頁尾導覽"><NuxtLink to="/">探索故事</NuxtLink><NuxtLink v-if="user" to="/checkins/new">寫下旅箋</NuxtLink><NuxtLink v-else to="/login">Discord 登入</NuxtLink></nav>
+        <nav aria-label="頁尾導覽"><NuxtLink to="/">探索故事</NuxtLink><template v-if="user"><NuxtLink to="/checkins/new">寫下旅箋</NuxtLink><NuxtLink to="/drafts">我的草稿</NuxtLink></template><NuxtLink v-else to="/login">Discord 登入</NuxtLink></nav>
       </div>
     </footer>
   </div>

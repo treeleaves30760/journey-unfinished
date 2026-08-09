@@ -2,8 +2,12 @@ import Busboy from '@fastify/busboy'
 import { createError, getRequestHeaders, getRequestWebStream, type H3Event, type MultiPartData } from 'h3'
 import { Readable } from 'node:stream'
 
-const MAX_FIELDS = 12
-const MAX_FIELD_BYTES = 2_048
+// 目前最多的一次是「發佈草稿」：11 個旅箋欄位 + draftId + clearPhoto/clearAvatar = 14。
+// 留一點餘裕，但仍然是硬上限——欄位數乘上 MAX_FIELD_BYTES 就是這個 parser 的記憶體天花板。
+const MAX_FIELDS = 18
+// Markdown 讓旅途留言的上限拉到 2000 個字，換算成 UTF-8 最壞情況（中日韓字元 3 bytes、
+// 少數 emoji 4 bytes）約 8 KiB，這裡取 12 KiB 保留餘裕，仍遠低於任何記憶體風險。
+const MAX_FIELD_BYTES = 12_288
 const MAX_FILES = 2
 
 /**
@@ -19,7 +23,9 @@ export async function readLimitedMultipart(event: H3Event, maxUploadBytes: numbe
   }
 
   const declaredLength = Number(headers['content-length'])
-  const maximumRequestBytes = maxUploadBytes * MAX_FILES + 128 * 1024
+  // 上限＝兩張圖 + 所有文字欄位的最壞情況 + multipart 分隔線之類的框架開銷。
+  // 直接由 MAX_FIELDS／MAX_FIELD_BYTES 推導，改動欄位限制時不會忘了同步這個數字。
+  const maximumRequestBytes = maxUploadBytes * MAX_FILES + MAX_FIELDS * MAX_FIELD_BYTES + 64 * 1024
   if (Number.isFinite(declaredLength) && declaredLength > maximumRequestBytes) {
     throw createError({ statusCode: 413, message: '上傳資料超過允許大小' })
   }
