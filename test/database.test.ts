@@ -167,7 +167,7 @@ describe('SQLite schema and migrations', () => {
       discordId: '623456789012345678', username: 'drafter', displayName: '草稿作者', avatarUrl: null
     })
     const draft = database.createDraft(owner.id, {
-      nickname: null, location: '只拍了照片的地方', countryCode: 'JP', county: '京都府',
+      dollId: null, nickname: null, location: '只拍了照片的地方', countryCode: 'JP', county: '京都府',
       latitude: 35.0169, longitude: 135.6716, dollName: null, series: null,
       message: null, visitedAt: null, avatarPreset: 'sun'
     }, '/uploads/photo-draft.jpg', null)
@@ -178,7 +178,7 @@ describe('SQLite schema and migrations', () => {
 
     // photo 傳 undefined 代表「保留原圖」：手機存好的照片不該在桌機只改文字時被清掉
     const updated = database.updateDraft(draft.id, {
-      nickname: '旅人', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
+      dollId: null, nickname: '旅人', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
       latitude: 35.0169, longitude: 135.6716, dollName: '小柚', series: null,
       message: '## 竹林的清晨', visitedAt: '2025-11-03', avatarPreset: 'leaf'
     }, undefined, undefined)
@@ -186,7 +186,7 @@ describe('SQLite schema and migrations', () => {
 
     // 明確傳 null 才是「清空」
     const cleared = database.updateDraft(draft.id, {
-      nickname: '旅人', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
+      dollId: null, nickname: '旅人', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
       latitude: 35.0169, longitude: 135.6716, dollName: '小柚', series: null,
       message: '## 竹林的清晨', visitedAt: '2025-11-03', avatarPreset: 'leaf'
     }, null, undefined)

@@ -1,6 +1,8 @@
 export interface Checkin {
   id: number
   userId: number | null
+  /** 關聯到的娃娃檔案；舊資料與檔案被刪掉之後都是 null，旅箋自己的 dollName 仍在 */
+  dollId: number | null
   nickname: string
   location: string
   /** ISO 3166-1 alpha-2；介面上稱為「區域」，顯示名稱由 utils/countries.ts 的 regionName 推導 */
@@ -27,6 +29,7 @@ export interface Checkin {
 export interface Draft {
   id: number
   userId: number
+  dollId: number | null
   nickname: string | null
   location: string | null
   countryCode: string | null
@@ -67,6 +70,23 @@ export const counties = [
   '臺中市', '彰化縣', '南投縣', '雲林縣', '嘉義市', '嘉義縣', '臺南市',
   '高雄市', '屏東縣', '宜蘭縣', '花蓮縣', '臺東縣', '澎湖縣', '金門縣', '連江縣'
 ]
+
+/**
+ * 娃娃檔案：名稱、作品出處與頭像存一次，寫旅箋時直接選。
+ * 旅箋仍各自保留一份副本 —— 之後把娃娃改名不會回頭改寫已經寫下的旅程。
+ */
+export interface Doll {
+  id: number
+  userId: number
+  name: string
+  series: string | null
+  avatar: string | null
+  avatarPreset: string
+  createdAt: string
+  updatedAt: string
+  lastUsedAt: string | null
+  checkinCount: number
+}
 
 /**
  * 「日本・京都府」這種一眼看得出在哪裡的地點標籤，卡片、地圖側欄與詳情頁共用。

@@ -13,7 +13,7 @@ async function expectNoAccidentalOverflow(page: Page) {
   await stabilize(page)
   const metrics = await page.evaluate(() => {
     const viewport = window.innerWidth
-    const allowedScroller = '.admin-table-wrap, .stories-panel .card-grid, .map-side .story-list, .leaflet-container'
+    const allowedScroller = '.admin-table-wrap, .stories-panel .card-grid, .map-side .story-list, .leaflet-container, .doll-picker-row'
     const offenders = [...document.querySelectorAll<HTMLElement>('a, button, input, select, textarea, summary')]
       .filter((element) => {
         const style = getComputedStyle(element)
@@ -62,7 +62,7 @@ for (const viewport of [
     test('creation and admin pages keep visible controls inside the viewport', async ({ page, context }) => {
       await authenticate(context, 'admin')
       // /checkins/quick 與 /drafts 是手機優先的兩頁，最窄的 320px 更該守住不溢出
-      for (const path of ['/checkins/new', '/checkins/quick', '/drafts', '/admin']) {
+      for (const path of ['/checkins/new', '/checkins/quick', '/drafts', '/dolls', '/admin']) {
         await page.goto(path)
         await expect(page).toHaveURL(new RegExp(`${path}$`))
         await expectNoAccidentalOverflow(page)

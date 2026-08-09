@@ -157,7 +157,7 @@ describe('草稿的建立與跨裝置接手', () => {
     const { MAX_DRAFTS_PER_USER } = await import('../server/utils/drafts')
     for (let index = 0; index < MAX_DRAFTS_PER_USER; index += 1) {
       database.createDraft(owner.id, {
-        nickname: null, location: `地點 ${index}`, countryCode: null, county: null,
+        dollId: null, nickname: null, location: `地點 ${index}`, countryCode: null, county: null,
         latitude: null, longitude: null, dollName: null, series: null,
         message: null, visitedAt: null, avatarPreset: 'sun'
       }, null, null)

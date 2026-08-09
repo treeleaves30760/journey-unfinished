@@ -111,6 +111,8 @@ export function validateCheckin(fields: Record<string, unknown>): CheckinInput {
  * 上限一律照舊，避免有人靠草稿把超長內容存進資料庫。
  */
 export interface DraftInput {
+  /** 選到的娃娃檔案。端點會再確認它屬於當前使用者，這裡只負責格式。 */
+  dollId: number | null
   nickname: string | null
   location: string | null
   countryCode: string | null
@@ -133,6 +135,7 @@ export function validateDraft(fields: Record<string, unknown>): DraftInput {
   const visitedAtRaw = String(fields.visitedAt ?? '').trim()
   const countryCodeRaw = String(fields.countryCode ?? '').trim()
   return {
+    dollId: optionalId(fields.dollId),
     nickname: optionalSafeText(fields.nickname, '暱稱', 30, { multiline: false, maxLinks: 0 }),
     location: optionalSafeText(fields.location, '地點', 80, { multiline: false, maxLinks: 0 }),
     countryCode: countryCodeRaw ? validateCountryCode(countryCodeRaw) : null,
@@ -261,6 +264,34 @@ export function assertUniqueComment(source: string, nickname: string, message: s
     throw createError({ statusCode: 429, message: '剛剛已送出相同內容的留言，請換個說法再試' })
   }
   rememberFingerprint(fingerprint, now)
+}
+
+/**
+ * 選填的資料列編號（目前是 dollId）。空字串與未填一律是 null —— 表單不選娃娃是正常狀況，
+ * 不是錯誤；但只要填了東西就必須是合法編號，不能默默當成「沒選」放過去。
+ */
+export function optionalId(value: unknown): number | null {
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  return parseId(raw)
+}
+
+/**
+ * 娃娃檔案。名稱與作品出處會公開顯示在每一則套用它的旅箋上，
+ * 因此走與旅箋自由文字完全相同的衛生規則。
+ */
+export function validateDoll(fields: Record<string, unknown>): DollInput {
+  return {
+    name: safeText(fields.name, '娃娃名稱', 1, 40, { multiline: false, maxLinks: 0 }),
+    series: optionalSafeText(fields.series, '作品', 60, { multiline: false, maxLinks: 0 }),
+    avatarPreset: validateAvatarPreset(fields.avatarPreset)
+  }
+}
+
+export interface DollInput {
+  name: string
+  series: string | null
+  avatarPreset: string
 }
 
 export function parseId(value: string | undefined) {

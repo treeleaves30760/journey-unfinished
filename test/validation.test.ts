@@ -184,7 +184,7 @@ describe('validateCheckin series 欄位（選填）', () => {
 describe('validateDraft', () => {
   it('accepts a completely empty draft', () => {
     expect(validateDraft({})).toEqual({
-      nickname: null, location: null, countryCode: null, county: null,
+      dollId: null, nickname: null, location: null, countryCode: null, county: null,
       latitude: null, longitude: null, dollName: null, series: null,
       message: null, visitedAt: null, avatarPreset: 'sun'
     })

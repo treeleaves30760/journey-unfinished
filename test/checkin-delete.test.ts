@@ -50,6 +50,7 @@ function checkinRecord(overrides: Partial<Checkin> = {}): Checkin {
     ...checkinInput,
     id: 1,
     userId: 1,
+    dollId: null,
     photo: null,
     avatar: null,
     createdAt: '2026-01-01 00:00:00',
