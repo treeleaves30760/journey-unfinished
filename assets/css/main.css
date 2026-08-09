@@ -1529,3 +1529,79 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
   .picker-search .secondary-button { width: 100%; }
   .quick-step { padding: 15px; border-radius: 18px; }
 }
+
+/* ---------------------------------------------------------------------------
+   娃娃檔案：選擇器與管理頁
+   --------------------------------------------------------------------------- */
+.doll-picker { display: grid; gap: 10px; margin-bottom: 4px; }
+.doll-picker-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.doll-picker-head > span { color: var(--ink); font-size: .82rem; font-weight: 800; }
+/* 橫向捲動而不是換行：娃娃可能有十幾隻，讓它佔掉半個表單並不划算。
+   這是刻意允許的內部捲動區（e2e 的溢出檢查也把 .doll-picker-row 列為合法捲軸）。 */
+.doll-picker-row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 2px 8px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+.doll-chip {
+  display: grid;
+  width: 92px;
+  flex: 0 0 auto;
+  justify-items: center;
+  gap: 3px;
+  padding: 10px 6px;
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  cursor: pointer;
+  background: var(--paper-strong);
+  scroll-snap-align: start;
+  text-align: center;
+  text-decoration: none;
+}
+.doll-chip:hover { border-color: var(--line-strong); background: var(--rose-soft); }
+.doll-chip.checked { border-color: var(--rose); background: var(--rose-soft); box-shadow: 0 0 0 3px rgb(217 103 126 / 14%); }
+.doll-chip strong { overflow: hidden; max-width: 100%; font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+.doll-chip small { color: var(--muted); font-size: .64rem; }
+.doll-chip.ghost { border-style: dashed; background: var(--paper); }
+.doll-chip-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  color: var(--rose-dark);
+  border: 1px dashed var(--line-strong);
+  border-radius: 50%;
+  background: var(--paper-strong);
+  font-size: 1.1rem;
+}
+
+.dolls-page { width: min(100% - 28px, var(--content)); margin: 0 auto; padding: 26px 0 80px; }
+.dolls-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 12px; color: var(--muted); font-size: .82rem; }
+.doll-form { margin-bottom: 18px; }
+.doll-current-avatar { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+.doll-current-avatar span { color: var(--muted); font-size: .78rem; }
+
+.doll-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.doll-card {
+  display: grid;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper-strong);
+  box-shadow: var(--shadow-soft);
+}
+.doll-card-body { display: grid; min-width: 0; gap: 2px; }
+.doll-card-body > strong { overflow: hidden; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
+.doll-card-meta { color: var(--muted); font-size: .74rem; }
+.doll-card-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; grid-column: 1 / -1; }
+
+@media (max-width: 560px) {
+  .doll-chip { width: 82px; }
+  .doll-list { grid-template-columns: 1fr; }
+}

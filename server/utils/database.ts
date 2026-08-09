@@ -2,11 +2,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { DEFAULT_COUNTRY_CODE } from '../../utils/countries'
-import { MAX_MESSAGE_LENGTH, type CheckinInput, type DraftInput } from './validation'
+import { MAX_MESSAGE_LENGTH, type CheckinInput, type DollInput, type DraftInput } from './validation'
 
 export interface Checkin extends CheckinInput {
   id: number
   userId: number | null
+  /** 關聯到的娃娃檔案；舊資料與檔案被刪掉之後都是 null，旅箋本身的 dollName 仍在 */
+  dollId: number | null
   photo: string | null
   avatar: string | null
   createdAt: string
@@ -20,6 +22,28 @@ export interface Draft extends DraftInput {
   avatar: string | null
   createdAt: string
   updatedAt: string
+}
+
+/**
+ * 娃娃檔案：名稱、作品出處與頭像存一次，寫旅箋時直接選。
+ *
+ * 旅箋仍然各自保留 doll_name／series／avatar 的副本，不是join 出來的 —— 一則旅箋是
+ * 當下的紀錄，之後把娃娃改名不該回頭改寫歷史。doll_id 只是「這幾則是同一隻」的關聯，
+ * 娃娃被刪除時設成 NULL，旅箋本身完全不受影響。
+ */
+export interface Doll {
+  id: number
+  userId: number
+  name: string
+  series: string | null
+  avatar: string | null
+  avatarPreset: string
+  createdAt: string
+  updatedAt: string
+  /** 最近一次被用來寫旅箋的時間。選擇器靠它決定預設選哪一隻。 */
+  lastUsedAt: string | null
+  /** 一起走過幾個地方，管理頁用 */
+  checkinCount: number
 }
 
 export interface Comment {
@@ -51,7 +75,7 @@ const userColumns = `id, discord_id AS discordId, username, display_name AS disp
   avatar_url AS avatarUrl, role, created_at AS createdAt, last_login_at AS lastLoginAt`
 
 const baseSelect = `
-  SELECT c.id, c.user_id AS userId, c.nickname, c.location,
+  SELECT c.id, c.user_id AS userId, c.doll_id AS dollId, c.nickname, c.location,
     c.country_code AS countryCode, c.county,
     c.latitude, c.longitude, c.doll_name AS dollName, c.series,
     c.message, c.visited_at AS visitedAt,
@@ -61,8 +85,15 @@ const baseSelect = `
   FROM checkins c LEFT JOIN comments cm ON cm.checkin_id = c.id`
 
 const draftColumns = `id, user_id AS userId, nickname, location, country_code AS countryCode, county,
-  latitude, longitude, doll_name AS dollName, series, message, visited_at AS visitedAt,
+  latitude, longitude, doll_id AS dollId, doll_name AS dollName, series, message, visited_at AS visitedAt,
   photo, avatar, avatar_preset AS avatarPreset, created_at AS createdAt, updated_at AS updatedAt`
+
+// checkinCount 走子查詢而不是 LEFT JOIN + GROUP BY：娃娃只有幾隻，但旅箋會一直長，
+// 用 GROUP BY 會讓「沒有旅箋的娃娃」需要額外處理 NULL，子查詢直接回 0 乾淨得多。
+const dollColumns = `d.id, d.user_id AS userId, d.name, d.series, d.avatar,
+  d.avatar_preset AS avatarPreset, d.created_at AS createdAt, d.updated_at AS updatedAt,
+  d.last_used_at AS lastUsedAt,
+  (SELECT COUNT(*) FROM checkins c WHERE c.doll_id = d.id) AS checkinCount`
 
 /**
  * checkins 的權威定義只有這一份，重建表格時（見 migrateCheckins）沿用同一個字串，
@@ -73,6 +104,7 @@ function checkinsTableSql(tableName: string) {
   return `CREATE TABLE IF NOT EXISTS ${tableName} (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      doll_id INTEGER REFERENCES dolls(id) ON DELETE SET NULL,
       nickname TEXT NOT NULL CHECK(length(nickname) BETWEEN 1 AND 30),
       location TEXT NOT NULL CHECK(length(location) BETWEEN 2 AND 80),
       country_code TEXT NOT NULL DEFAULT '${DEFAULT_COUNTRY_CODE}' CHECK(length(country_code) = 2),
@@ -160,10 +192,22 @@ export function getDatabase(): SQLiteDatabase {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       last_login_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS dolls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 40),
+      series TEXT CHECK(series IS NULL OR length(series) BETWEEN 1 AND 60),
+      avatar TEXT,
+      avatar_preset TEXT NOT NULL DEFAULT 'sun',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_used_at TEXT
+    );
     ${checkinsTableSql('checkins')};
     CREATE TABLE IF NOT EXISTS checkin_drafts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      doll_id INTEGER REFERENCES dolls(id) ON DELETE SET NULL,
       nickname TEXT CHECK(nickname IS NULL OR length(nickname) <= 30),
       location TEXT CHECK(location IS NULL OR length(location) <= 80),
       country_code TEXT CHECK(country_code IS NULL OR length(country_code) = 2),
@@ -200,6 +244,8 @@ export function getDatabase(): SQLiteDatabase {
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_id);
     CREATE INDEX IF NOT EXISTS idx_checkin_drafts_user ON checkin_drafts(user_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_dolls_user ON dolls(user_id, last_used_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_checkins_doll ON checkins(doll_id);
     CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
   `)
   seed(database)
@@ -227,6 +273,16 @@ function migrateCheckins(db: SQLiteDatabase) {
   if (!hasColumn('country_code')) {
     db.exec(`ALTER TABLE checkins ADD COLUMN country_code TEXT NOT NULL DEFAULT '${DEFAULT_COUNTRY_CODE}' CHECK(length(country_code) = 2)`)
   }
+  // 娃娃檔案是後來才有的，既有旅箋一律留 NULL —— 它們寫下的當時沒有可以關聯的檔案，
+  // 硬去猜「名字一樣就是同一隻」會把不同人的同名娃娃綁在一起。
+  if (!hasColumn('doll_id')) {
+    db.exec('ALTER TABLE checkins ADD COLUMN doll_id INTEGER REFERENCES dolls(id) ON DELETE SET NULL')
+  }
+  const draftColumnNames = (db.prepare('PRAGMA table_info(checkin_drafts)').all() as Array<{ name: string }>)
+    .map(column => column.name)
+  if (!draftColumnNames.includes('doll_id')) {
+    db.exec('ALTER TABLE checkin_drafts ADD COLUMN doll_id INTEGER REFERENCES dolls(id) ON DELETE SET NULL')
+  }
 
   // message 的長度上限寫在 CHECK 約束裡，而 SQLite 不能單獨修改 CHECK —— 只能整張表重建。
   // 用「目前的 SQL 定義是否已經包含新上限」判斷，比記版本號可靠：不論這個資料庫是從哪一版
@@ -250,7 +306,7 @@ function migrateCheckins(db: SQLiteDatabase) {
  * 最後跑一次 foreign_key_check：寧可在啟動時大聲失敗，也不要讓孤兒留言悄悄留在資料庫裡。
  */
 function rebuildCheckins(db: SQLiteDatabase) {
-  const columns = `id, user_id, nickname, location, country_code, county, latitude, longitude,
+  const columns = `id, user_id, doll_id, nickname, location, country_code, county, latitude, longitude,
     doll_name, series, message, visited_at, photo, avatar, avatar_preset, created_at`
   db.pragma('foreign_keys = OFF')
   try {
@@ -280,15 +336,21 @@ export function findCheckin(id: number): Checkin | undefined {
   return getDatabase().prepare(`${baseSelect} WHERE c.id = ? GROUP BY c.id`).get(id) as Checkin | undefined
 }
 
-export function createCheckin(input: CheckinInput, photo: string | null, avatar: string | null, userId: number): Checkin {
+export function createCheckin(
+  input: CheckinInput,
+  photo: string | null,
+  avatar: string | null,
+  userId: number,
+  dollId: number | null = null
+): Checkin {
   const result = getDatabase().prepare(`
     INSERT INTO checkins
-      (user_id, nickname, location, country_code, county, latitude, longitude, doll_name, series, message, visited_at, photo, avatar, avatar_preset)
+      (user_id, doll_id, nickname, location, country_code, county, latitude, longitude, doll_name, series, message, visited_at, photo, avatar, avatar_preset)
     VALUES
-      (@userId, @nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @series, @message, @visitedAt, @photo, @avatar, @avatarPreset)`)
+      (@userId, @dollId, @nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @series, @message, @visitedAt, @photo, @avatar, @avatarPreset)`)
     // series 在 CheckinInput 上是可選屬性（舊呼叫端可能沒帶），先補 null 再讓 input 蓋過去；
     // countryCode 則是必填，不需要預設值。
-    .run({ series: null, ...input, photo, avatar, userId })
+    .run({ series: null, ...input, photo, avatar, userId, dollId })
   return findCheckin(Number(result.lastInsertRowid))!
 }
 
@@ -318,9 +380,9 @@ export function countDrafts(userId: number): number {
 export function createDraft(userId: number, input: DraftInput, photo: string | null, avatar: string | null): Draft {
   const result = getDatabase().prepare(`
     INSERT INTO checkin_drafts
-      (user_id, nickname, location, country_code, county, latitude, longitude, doll_name, series, message, visited_at, photo, avatar, avatar_preset)
+      (user_id, doll_id, nickname, location, country_code, county, latitude, longitude, doll_name, series, message, visited_at, photo, avatar, avatar_preset)
     VALUES
-      (@userId, @nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @series, @message, @visitedAt, @photo, @avatar, @avatarPreset)`)
+      (@userId, @dollId, @nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @series, @message, @visitedAt, @photo, @avatar, @avatarPreset)`)
     .run({ ...input, photo, avatar, userId })
   return findDraft(Number(result.lastInsertRowid))!
 }
@@ -338,7 +400,7 @@ export function updateDraft(
   getDatabase().prepare(`
     UPDATE checkin_drafts SET
       nickname = @nickname, location = @location, country_code = @countryCode, county = @county,
-      latitude = @latitude, longitude = @longitude, doll_name = @dollName, series = @series,
+      latitude = @latitude, longitude = @longitude, doll_id = @dollId, doll_name = @dollName, series = @series,
       message = @message, visited_at = @visitedAt, avatar_preset = @avatarPreset,
       photo = CASE WHEN @keepPhoto = 1 THEN photo ELSE @photo END,
       avatar = CASE WHEN @keepAvatar = 1 THEN avatar ELSE @avatar END,
@@ -440,6 +502,67 @@ export function findUserById(id: number): User | undefined {
 export function setUserRole(id: number, role: 'user' | 'admin'): User | undefined {
   getDatabase().prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id)
   return findUserById(id)
+}
+
+/**
+ * 娃娃檔案。排序把「最近用過的」放最前面，選擇器的預設值就是清單的第一筆 ——
+ * 使用者連續替同一隻娃娃寫旅箋時完全不用選。從未用過的（lastUsedAt 為 NULL）排在後面，
+ * 但仍以建立時間遞減排序，剛新增的那隻不會沉到最底下找不到。
+ */
+export function listDolls(userId: number): Doll[] {
+  return getDatabase().prepare(`
+    SELECT ${dollColumns} FROM dolls d
+    WHERE d.user_id = ?
+    ORDER BY d.last_used_at IS NULL, d.last_used_at DESC, d.id DESC`).all(userId) as Doll[]
+}
+
+export function findDoll(id: number): Doll | undefined {
+  return getDatabase().prepare(`SELECT ${dollColumns} FROM dolls d WHERE d.id = ?`).get(id) as Doll | undefined
+}
+
+export function countDolls(userId: number): number {
+  return (getDatabase().prepare('SELECT COUNT(*) AS count FROM dolls WHERE user_id = ?')
+    .get(userId) as { count: number }).count
+}
+
+export function createDoll(userId: number, input: DollInput, avatar: string | null): Doll {
+  const result = getDatabase().prepare(`
+    INSERT INTO dolls (user_id, name, series, avatar, avatar_preset)
+    VALUES (@userId, @name, @series, @avatar, @avatarPreset)`)
+    .run({ ...input, avatar, userId })
+  return findDoll(Number(result.lastInsertRowid))!
+}
+
+/** avatar 的三態與草稿相同：undefined 保留原圖、null 清空、字串換新檔。 */
+export function updateDoll(id: number, input: DollInput, avatar: string | null | undefined): Doll | undefined {
+  getDatabase().prepare(`
+    UPDATE dolls SET
+      name = @name, series = @series, avatar_preset = @avatarPreset,
+      avatar = CASE WHEN @keepAvatar = 1 THEN avatar ELSE @avatar END,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = @id`)
+    .run({ ...input, id, avatar: avatar ?? null, keepAvatar: avatar === undefined ? 1 : 0 })
+  return findDoll(id)
+}
+
+export function deleteDoll(id: number) {
+  return getDatabase().prepare('DELETE FROM dolls WHERE id = ?').run(id).changes > 0
+}
+
+/** 發佈旅箋時記一筆「最近用過」，讓下一次的選擇器預設選它。 */
+export function touchDoll(id: number) {
+  getDatabase().prepare('UPDATE dolls SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+}
+
+/**
+ * 這個人上一則旅箋的暱稱。表單用它當預設值 —— 比 Discord 顯示名稱更貼近
+ * 「他在這個站上習慣怎麼稱呼自己」。沒寫過旅箋時回 null，由呼叫端退回 Discord 名稱。
+ */
+export function lastNicknameOf(userId: number): string | null {
+  const row = getDatabase().prepare(
+    'SELECT nickname FROM checkins WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1'
+  ).get(userId) as { nickname: string } | undefined
+  return row?.nickname ?? null
 }
 
 export function closeDatabaseForTests() {

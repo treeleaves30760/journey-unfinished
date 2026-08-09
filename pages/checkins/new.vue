@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Draft } from '~/composables/useCheckins'
+import type { Doll, Draft } from '~/composables/useCheckins'
 import type { PlaceValue } from '~/components/LocationPicker.vue'
 
 definePageMeta({ middleware: 'auth' })
@@ -17,10 +17,14 @@ function todayInput() {
 
 const today = todayInput()
 const form = reactive({
+  dollId: null as number | null,
   nickname: '', location: '', countryCode: DEFAULT_COUNTRY_CODE, county: '',
   latitude: null as number | null, longitude: null as number | null,
   dollName: '', series: '', message: '', visitedAt: today, avatarPreset: 'sun'
 })
+const dollPicker = ref<{ lastNickname: string | null } | null>(null)
+// 從草稿接手時不要讓選擇器自動選「上次用的」—— 草稿存的是使用者當初的選擇。
+const autoSelectDoll = ref(true)
 
 const photoInput = ref<HTMLInputElement | null>(null)
 const photo = ref<File | null>(null)
@@ -65,9 +69,29 @@ const stepCompletion = computed(() => [
 ])
 const completedSteps = computed(() => stepCompletion.value.filter(Boolean).length)
 
+// 暱稱的預設值：優先用「上一則旅箋填的」，那比 Discord 顯示名稱更貼近他在這個站上
+// 習慣怎麼稱呼自己；沒寫過旅箋才退回 Discord 名稱。兩者都只在欄位還空著時才填。
 watch(user, (value) => {
   if (value && !form.nickname) form.nickname = value.displayName.slice(0, 30)
 }, { immediate: true })
+// 使用者一旦自己改過暱稱，就不要再被任何預設值蓋掉
+const dirtyNickname = ref(false)
+watch(() => dollPicker.value?.lastNickname, (nickname) => {
+  if (nickname && !dirtyNickname.value) form.nickname = nickname.slice(0, 30)
+})
+
+/** 選了娃娃：把檔案裡的資料帶進表單。帶完仍可自由編輯，改動只影響這一則旅箋。 */
+function applyDoll(doll: Doll | null) {
+  if (!doll) return
+  form.dollName = doll.name
+  form.series = doll.series || ''
+  form.avatarPreset = doll.avatarPreset
+  // 這一則要用的頭像由伺服器依 dollId 從檔案複製一份，所以這裡只負責預覽
+  storedAvatar.value = doll.avatar
+  avatar.value = null
+  avatarPreview.value = null
+  clearAvatar.value = false
+}
 
 function choosePhoto(event: Event) {
   const input = event.target as HTMLInputElement
@@ -115,6 +139,8 @@ async function loadDraft(id: number) {
   try {
     const { draft } = await $fetch<{ draft: Draft }>(`/api/drafts/${id}`)
     draftId.value = draft.id
+    autoSelectDoll.value = false
+    form.dollId = draft.dollId
     form.nickname = draft.nickname || form.nickname
     form.location = draft.location || ''
     form.countryCode = draft.countryCode || DEFAULT_COUNTRY_CODE
@@ -225,8 +251,11 @@ useHead({ title: '寫下這一站｜未完旅箋' })
       <form class="checkin-form" @submit.prevent="submit">
         <section class="form-card">
           <div class="form-card-heading"><span>01</span><div><h2>旅人與娃娃</h2><p>先介紹這趟旅行的主角吧。</p></div></div>
+          <ClientOnly>
+            <DollPicker ref="dollPicker" v-model="form.dollId" :auto-select="autoSelectDoll" @select="applyDoll" />
+          </ClientOnly>
           <div class="field-grid two">
-            <label class="field"><span>你的暱稱 <b>*</b></span><input v-model.trim="form.nickname" required maxlength="30" autocomplete="nickname" placeholder="例如：小晴"></label>
+            <label class="field"><span>你的暱稱 <b>*</b></span><input v-model.trim="form.nickname" required maxlength="30" autocomplete="nickname" placeholder="例如：小晴" @input="dirtyNickname = true"></label>
             <label class="field"><span>娃娃名稱 <b>*</b></span><input v-model.trim="form.dollName" required maxlength="40" placeholder="例如：暖暖"></label>
           </div>
           <label class="field"><span>作品出處 <small>原創娃娃可以留空</small></span><input v-model.trim="form.series" maxlength="60" placeholder="這隻娃娃出自哪部作品？"></label>

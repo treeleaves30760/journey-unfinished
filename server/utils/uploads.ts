@@ -93,6 +93,33 @@ export async function saveImage(part: MultiPartData | undefined, prefix: 'photo'
   return `/uploads/${filename}`
 }
 
+/**
+ * 把一張已經存在的上傳圖複製成新檔案，回傳新的網址。
+ *
+ * 娃娃檔案的頭像會被套用到每一則旅箋與草稿上，但刪除旅箋時會連它的圖檔一起刪掉
+ * （見 checkins/[id].delete.ts 的 deleteCheckinAndImages）。若讓多列共用同一個路徑，
+ * 刪掉其中一則就會弄壞娃娃檔案本身與其他所有引用它的旅箋。
+ *
+ * 因此規則是「每一列各自持有一份」：套用時複製一份。頭像是 320×320 的 WebP，
+ * 通常只有幾十 KB，這點空間換掉一整類難以察覺的資料毀損很划算。
+ */
+export function copySavedImage(url: string | null, prefix: 'photo' | 'avatar') {
+  if (!url) return null
+  const uploadDir = path.resolve(String(useRuntimeConfig().uploadDir))
+  // basename 同時擋掉路徑穿越：來源一定落在上傳目錄內
+  const source = path.join(uploadDir, path.basename(url))
+  const extension = path.extname(source).slice(1) || 'webp'
+  const filename = `${prefix}-${randomBytes(18).toString('hex')}.${extension}`
+  try {
+    fs.copyFileSync(source, path.join(uploadDir, filename), fs.constants.COPYFILE_EXCL)
+  } catch {
+    // 來源檔不見了（例如手動清過上傳目錄）。頭像是選填的，退回預設頭像即可，
+    // 不值得為了它讓整個「寫下旅箋」失敗。
+    return null
+  }
+  return `/uploads/${filename}`
+}
+
 export function removeSavedImage(url: string | null) {
   if (!url) return
   try {

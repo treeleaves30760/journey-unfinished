@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Draft } from '~/composables/useCheckins'
+import type { Doll, Draft } from '~/composables/useCheckins'
 import type { PlaceValue } from '~/components/LocationPicker.vue'
 
 definePageMeta({ middleware: 'auth' })
@@ -16,8 +16,14 @@ const { user } = useAuth()
 const place = ref<PlaceValue>({
   location: '', countryCode: DEFAULT_COUNTRY_CODE, county: '', latitude: null, longitude: null
 })
+const dollId = ref<number | null>(null)
 const dollName = ref('')
 const note = ref('')
+
+/** 選了娃娃就把名稱帶進來；快速記錄只需要名稱，其餘（作品、頭像）發佈時由伺服器依 dollId 套用。 */
+function applyDoll(doll: Doll | null) {
+  dollName.value = doll?.name ?? ''
+}
 const photo = ref<File | null>(null)
 const photoPreview = ref<string | null>(null)
 const photoError = ref('')
@@ -64,6 +70,7 @@ async function saveDraft() {
   if (place.value.county.trim()) body.append('county', place.value.county.trim())
   if (place.value.latitude !== null) body.append('latitude', String(place.value.latitude))
   if (place.value.longitude !== null) body.append('longitude', String(place.value.longitude))
+  if (dollId.value !== null) body.append('dollId', String(dollId.value))
   if (dollName.value.trim()) body.append('dollName', dollName.value.trim())
   if (note.value.trim()) body.append('message', note.value.trim())
   if (photo.value) body.append('photo', photo.value)
@@ -83,7 +90,7 @@ async function saveDraft() {
 
 function recordAnother() {
   savedDraft.value = null
-  dollName.value = ''
+  // 刻意保留 dollId 與娃娃名稱：連續記錄多個地點時，通常帶的是同一隻娃娃
   note.value = ''
   place.value = { location: '', countryCode: place.value.countryCode, county: '', latitude: null, longitude: null }
 }
@@ -138,7 +145,10 @@ useHead({ title: '快速記錄｜未完旅箋' })
       </section>
 
       <section class="quick-step">
-        <h2><span>03</span>順手記兩句 <small>選填</small></h2>
+        <h2><span>03</span>這次帶了誰 <small>選填</small></h2>
+        <ClientOnly>
+          <DollPicker v-model="dollId" @select="applyDoll" />
+        </ClientOnly>
         <div class="field-grid two">
           <label class="field"><span>娃娃名稱</span><input v-model.trim="dollName" maxlength="40" placeholder="例如：暖暖"></label>
           <label class="field"><span>一句話備忘</span><input v-model.trim="note" maxlength="200" placeholder="風很大、夕陽剛好…"></label>
