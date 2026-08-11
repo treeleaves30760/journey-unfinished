@@ -6,8 +6,6 @@ import { DEFAULT_COUNTRY_CODE, isCountryCode } from '../../utils/countries'
 // 伺服器端改成長度與內容衛生檢查（見 validateCheckin 的 county）。
 // 前端在區域選到臺灣時仍會提供這份清單當 datalist 建議值，那一份住在 composables/useCheckins.ts。
 
-export const AVATARS = ['sun', 'leaf', 'berry', 'ocean', 'cloud', 'peach'] as const
-
 // 旅途留言支援 Markdown，一段有小標、清單與引言的遊記需要的篇幅遠比純文字多。
 // 這個數字同時是資料庫 CHECK 約束的上限（見 database.ts 的 checkinsTableSql），兩邊必須一致。
 export const MAX_MESSAGE_LENGTH = 2_000
@@ -31,7 +29,6 @@ export interface CheckinInput {
   series?: string | null
   message: string
   visitedAt: string
-  avatarPreset: string
 }
 
 function text(value: unknown, label: string, min: number, max: number) {
@@ -73,16 +70,8 @@ function validateVisitedAt(value: unknown) {
   return visitedAt
 }
 
-function validateAvatarPreset(value: unknown) {
-  const avatarPreset = String(value || 'sun')
-  if (!AVATARS.includes(avatarPreset as typeof AVATARS[number])) {
-    throw createError({ statusCode: 400, message: '預設頭像無效' })
-  }
-  return avatarPreset
-}
-
 export function validateCheckin(fields: Record<string, unknown>): CheckinInput {
-  // countryCode 與 avatarPreset 是列舉、visitedAt 是嚴格日期格式，都不需要再過衛生檢查；
+  // countryCode 是列舉、visitedAt 是嚴格日期格式，都不需要再過衛生檢查；
   // 其餘六個自由文字欄位會公開渲染在旅箋頁上，套用與留言相同的規則。series 額外允許留空
   // （原創娃娃沒有作品出處），交給 optionalSafeText 把空白／未填寫正規化成 null。
   return {
@@ -96,8 +85,7 @@ export function validateCheckin(fields: Record<string, unknown>): CheckinInput {
     dollName: safeText(fields.dollName, '娃娃名稱', 1, 40, { multiline: false, maxLinks: 0 }),
     series: optionalSafeText(fields.series, '作品', 60, { multiline: false, maxLinks: 0 }),
     message: safeText(fields.message, '旅途留言', 1, MAX_MESSAGE_LENGTH, { multiline: true, maxLinks: MAX_FREE_TEXT_LINKS }),
-    visitedAt: validateVisitedAt(fields.visitedAt),
-    avatarPreset: validateAvatarPreset(fields.avatarPreset)
+    visitedAt: validateVisitedAt(fields.visitedAt)
   }
 }
 
@@ -123,7 +111,6 @@ export interface DraftInput {
   series: string | null
   message: string | null
   visitedAt: string | null
-  avatarPreset: string
 }
 
 function optionalNumberInRange(value: unknown, label: string, min: number, max: number) {
@@ -145,8 +132,7 @@ export function validateDraft(fields: Record<string, unknown>): DraftInput {
     dollName: optionalSafeText(fields.dollName, '娃娃名稱', 40, { multiline: false, maxLinks: 0 }),
     series: optionalSafeText(fields.series, '作品', 60, { multiline: false, maxLinks: 0 }),
     message: optionalSafeText(fields.message, '旅途留言', MAX_MESSAGE_LENGTH, { multiline: true, maxLinks: MAX_FREE_TEXT_LINKS }),
-    visitedAt: visitedAtRaw ? validateVisitedAt(visitedAtRaw) : null,
-    avatarPreset: validateAvatarPreset(fields.avatarPreset)
+    visitedAt: visitedAtRaw ? validateVisitedAt(visitedAtRaw) : null
   }
 }
 
@@ -283,15 +269,13 @@ export function optionalId(value: unknown): number | null {
 export function validateDoll(fields: Record<string, unknown>): DollInput {
   return {
     name: safeText(fields.name, '娃娃名稱', 1, 40, { multiline: false, maxLinks: 0 }),
-    series: optionalSafeText(fields.series, '作品', 60, { multiline: false, maxLinks: 0 }),
-    avatarPreset: validateAvatarPreset(fields.avatarPreset)
+    series: optionalSafeText(fields.series, '作品', 60, { multiline: false, maxLinks: 0 })
   }
 }
 
 export interface DollInput {
   name: string
   series: string | null
-  avatarPreset: string
 }
 
 export function parseId(value: string | undefined) {

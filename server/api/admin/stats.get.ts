@@ -126,7 +126,7 @@ export default defineEventHandler((event) => {
     'SELECT country_code AS countryCode, COUNT(*) AS count FROM checkins GROUP BY country_code ORDER BY count DESC, country_code ASC'
   ).all() as Array<{ countryCode: string, count: number }>
 
-  // INNER JOIN 天然排除 user_id IS NULL 的旅箋（demo 種子資料，或作者帳號已被刪除、
+  // INNER JOIN 天然排除 user_id IS NULL 的旅箋（早期匿名寫下的，或作者帳號已被刪除、
   // 外鍵 SET NULL 留下的舊資料）——「最活躍作者」談的是可辨識的會員排行，無主旅箋
   // 沒有作者可歸功，不該混進榜單，也不需要額外的 WHERE 子句特別排除。
   const topAuthors = db.prepare(`
@@ -138,16 +138,16 @@ export default defineEventHandler((event) => {
   `).all(TOP_AUTHOR_LIMIT) as Array<{ userId: number, displayName: string, avatarUrl: string | null, checkinCount: number }>
 
   // 近期活動一樣用 created_at 排序：這裡要回答「站上剛剛發生了什麼」，一則今天寫下、
-  // 內容卻是三年前旅行的旅箋，仍然要出現在「最新旅箋」的最上方。多帶 avatar／avatarPreset
+  // 內容卻是三年前旅行的旅箋，仍然要出現在「最新旅箋」的最上方。多帶 avatar／photo
   // ／dollName／visitedAt 是為了讓管理頁能直接重用 pages/admin/index.vue 那份
   // 「旅箋管理」列表的既有樣式（DollAvatar + 位置 + 暱稱與娃娃 + 造訪日期），不必另外畫一套。
   const recentCheckins = db.prepare(`
-    SELECT id, location, nickname, county, doll_name AS dollName, photo, avatar, avatar_preset AS avatarPreset,
+    SELECT id, location, nickname, county, doll_name AS dollName, photo, avatar,
       visited_at AS visitedAt, created_at AS createdAt
     FROM checkins ORDER BY created_at DESC, id DESC LIMIT ?
   `).all(RECENT_ACTIVITY_LIMIT) as Array<{
     id: number, location: string, nickname: string, county: string, dollName: string,
-    photo: string | null, avatar: string | null, avatarPreset: string, visitedAt: string, createdAt: string
+    photo: string | null, avatar: string | null, visitedAt: string, createdAt: string
   }>
 
   const recentComments = db.prepare(`

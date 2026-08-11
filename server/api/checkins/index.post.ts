@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
     if (!finalPhoto) throw createError({ statusCode: 400, message: '請上傳一張旅途照片' })
 
     // 頭像的來源優先序，由「最明確的意圖」往下排：
-    //   1. 這次自己裁了一張    2. 明確要求改回預設頭像    3. 選了娃娃檔案
+    //   1. 這次自己裁了一張    2. 明確要求清掉繼承來的那張    3. 選了娃娃檔案
     //   4. 草稿本來就帶著的那張
     // 娃娃檔案的頭像要複製一份，不能共用路徑 —— 刪掉這則旅箋時會連圖檔一起刪，
     // 共用的話會順手弄壞娃娃檔案本身與其他所有引用它的旅箋（見 copySavedImage）。

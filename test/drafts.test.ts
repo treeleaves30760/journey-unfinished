@@ -159,7 +159,7 @@ describe('草稿的建立與跨裝置接手', () => {
       database.createDraft(owner.id, {
         dollId: null, nickname: null, location: `地點 ${index}`, countryCode: null, county: null,
         latitude: null, longitude: null, dollName: null, series: null,
-        message: null, visitedAt: null, avatarPreset: 'sun'
+        message: null, visitedAt: null
       }, null, null)
     }
     // 每份草稿都可能帶著一張 5 MB 的照片，沒有上限就是一條無限制的空間消耗路徑
@@ -255,8 +255,7 @@ describe('把草稿發佈成旅箋', () => {
     field('longitude', '135.6716'),
     field('dollName', '小柚'),
     field('message', '## 竹林的清晨\n\n六點的竹林還沒有人。'),
-    field('visitedAt', '2025-11-03'),
-    field('avatarPreset', 'leaf')
+    field('visitedAt', '2025-11-03')
   ]
 
   // 草稿本身可以什麼都缺，但發佈成旅箋時頭像是必填的，所以每個發佈情境都要帶一張。

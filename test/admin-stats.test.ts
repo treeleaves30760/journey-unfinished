@@ -61,8 +61,7 @@ const baseCheckin: CheckinInput = {
   longitude: 121.5654,
   dollName: '測試娃',
   message: '這是一段測試旅程。',
-  visitedAt: '2025-01-01',
-  avatarPreset: 'sun'
+  visitedAt: '2025-01-01'
 }
 
 const temporaryDirectories: string[] = []
@@ -108,13 +107,13 @@ async function loadContext() {
     database.getDatabase().prepare(`UPDATE ${table} SET created_at = ? WHERE id = ?`).run(value, id)
   }
 
-  // seed() 會在全新資料庫塞 6 則展示旅箋＋1 則留言；清掉旅箋，留言透過
-  // ON DELETE CASCADE 一併清掉，才能測到「真的沒有資料」的情境。
-  function wipeSeed() {
+  // 各案例自己鋪的旅箋會留到下一個案例；要測「真的沒有資料」的情境就得先清乾淨。
+  // 留言透過 ON DELETE CASCADE 一併消失，不必另外處理。
+  function wipeCheckins() {
     database.getDatabase().exec('DELETE FROM checkins')
   }
 
-  return { database, auth, handler, signIn, setCreatedAt, wipeSeed, ...route }
+  return { database, auth, handler, signIn, setCreatedAt, wipeCheckins, ...route }
 }
 
 afterEach(() => {
@@ -197,7 +196,7 @@ describe('權限驗證', () => {
 describe('空資料庫：每一項聚合都要能處理 0 筆', () => {
   it('回傳全部歸零／空陣列，時間序列仍是完整長度的 0 值骨架', async () => {
     const context = await loadContext()
-    context.wipeSeed()
+    context.wipeCheckins()
     const admin = context.signIn(ADMIN_DISCORD_ID, '站長')
     context.setCreatedAt('users', admin.id, '2026-02-15 04:00:00')
 
@@ -248,7 +247,7 @@ describe('空資料庫：每一項聚合都要能處理 0 筆', () => {
  */
 async function populatedContext() {
   const context = await loadContext()
-  context.wipeSeed()
+  context.wipeCheckins()
 
   const admin = context.signIn(ADMIN_DISCORD_ID, '站長')
   const authorA = context.signIn(AUTHOR_A_DISCORD_ID, '愛旅行的 A')
@@ -296,7 +295,7 @@ async function populatedContext() {
 }
 
 describe('有資料時：各項聚合數字與時間序列都要正確', () => {
-  it('總量統計只算真實資料，不含已被清掉的種子資料', async () => {
+  it('總量統計反映資料庫裡實際有的旅箋、會員與留言', async () => {
     const { response } = await populatedContext()
     expect(response.totals).toEqual({ checkins: 7, checkinsWithPhoto: 3, users: 4, comments: 3 })
   })

@@ -29,7 +29,7 @@ async function signOut() {
           <NuxtLink v-if="user" class="nav-link nav-cta" to="/checkins/new"><span aria-hidden="true">＋</span> 寫下旅箋</NuxtLink>
           <NuxtLink v-else class="nav-link nav-cta discord-login" :to="`/login?redirect=${encodeURIComponent(route.fullPath)}`"><span aria-hidden="true">DC</span> 登入</NuxtLink>
           <details v-if="user" class="account-menu">
-            <summary :aria-label="`${user.displayName}的帳號選單`"><DollAvatar :src="user.avatarUrl" preset="ocean" alt="" size="small" /></summary>
+            <summary :aria-label="`${user.displayName}的帳號選單`"><DollAvatar :src="user.avatarUrl" alt="" size="small" /></summary>
             <div class="account-popover"><span>Discord 帳號</span><strong>{{ user.displayName }}</strong><small>@{{ user.username }} · {{ isAdmin ? '管理員' : '會員' }}</small><NuxtLink class="account-link" to="/me"><span aria-hidden="true">◈</span> 個人管理區</NuxtLink><NuxtLink class="account-link" to="/checkins/quick"><span aria-hidden="true">⚡</span> 快速記錄</NuxtLink><NuxtLink class="account-link" to="/drafts"><span aria-hidden="true">✎</span> 我的草稿</NuxtLink><NuxtLink class="account-link" to="/dolls"><span aria-hidden="true">◍</span> 我的娃娃</NuxtLink><button type="button" :disabled="loggingOut" @click="signOut">{{ loggingOut ? '登出中…' : '登出' }}</button></div>
           </details>
         </nav>

@@ -15,7 +15,7 @@ const deleteError = ref('')
 const zoomed = ref(false)
 
 // 與伺服器端 assertCheckinDeletable 同一條規則：管理員，或 user_id 確實等於自己的擁有者。
-// 種子資料的 userId 是 null，這裡不能讓 null 和任何值比較成功。
+// 早期匿名寫下的旅箋 userId 是 null，這裡不能讓 null 和任何值比較成功。
 const canDelete = computed(() => {
   const checkin = data.value?.checkin
   if (!checkin || !user.value) return false
@@ -72,7 +72,7 @@ useHead(() => ({
       <div v-if="createdNotice" class="alert success-alert" role="status"><span class="notice-icon" aria-hidden="true">✓</span><div><strong>旅箋已寫下！</strong><span>這一頁已經出現在旅途地圖上。</span></div><button aria-label="關閉通知" @click="createdNotice = false">×</button></div>
       <NuxtLink class="back-link" to="/">← 回到探索地圖</NuxtLink>
       <article class="detail-story">
-        <div class="detail-photo" :class="`scene-${(data.checkin.id % 6) + 1}`">
+        <div class="detail-photo">
           <!-- 版面上的照片是裁切過的，所以放大的入口本身就是那張照片。用 button 包住而不是
                在 img 上掛 @click：鍵盤與螢幕閱讀器要有一個真的「可以按」的東西才找得到它。 -->
           <button
@@ -85,14 +85,13 @@ useHead(() => ({
             <img :src="data.checkin.photo" :alt="`${data.checkin.dollName}在${data.checkin.location}的旅途照片`">
             <span class="detail-photo-hint" aria-hidden="true">⤢ 點一下看完整照片</span>
           </button>
-          <div v-else class="placeholder-scene large" aria-hidden="true"><i class="sun-or-moon" /><i class="hill far" /><i class="hill near" /><span>JOURNEY<br>NOTES</span></div>
           <span class="photo-tape left" /><span class="photo-tape right" />
         </div>
         <div class="detail-copy">
           <span class="eyebrow">A PAGE ALONG THE WAY</span>
           <span class="county-chip">{{ placeLabel(data.checkin) }}</span>
           <h1>{{ data.checkin.location }}</h1>
-          <div class="detail-author"><DollAvatar :src="data.checkin.avatar" :photo="data.checkin.photo" :preset="data.checkin.avatarPreset" :alt="`${data.checkin.nickname}的頭像`" size="medium" /><div><strong>{{ data.checkin.nickname }} 與 {{ data.checkin.dollName }}</strong><time :datetime="data.checkin.visitedAt">{{ formatDate(data.checkin.visitedAt) }}</time></div></div>
+          <div class="detail-author"><DollAvatar :src="data.checkin.avatar" :photo="data.checkin.photo" :alt="`${data.checkin.nickname}的頭像`" size="medium" /><div><strong>{{ data.checkin.nickname }} 與 {{ data.checkin.dollName }}</strong><time :datetime="data.checkin.visitedAt">{{ formatDate(data.checkin.visitedAt) }}</time></div></div>
           <!-- 旅途留言支援 Markdown。MarkdownView 全程用 h() 產生節點，不經過 v-html，
                所以留言裡的 HTML 只會被當成文字顯示（詳見 utils/markdown.ts 的說明）。 -->
           <MarkdownView class="detail-message" :source="data.checkin.message" />

@@ -121,7 +121,6 @@ const publishFields = [
   field('dollName', '小柚'),
   field('message', '六點的竹林還沒有人。'),
   field('visitedAt', '2025-11-03'),
-  field('avatarPreset', 'leaf'),
   file('photo', Buffer.alloc(0))
 ]
 
@@ -132,9 +131,9 @@ describe('娃娃檔案的建立與擁有權', () => {
 
     const { doll } = await handlers.create(event({
       token: owner.token,
-      parts: [field('name', '暖暖'), field('series', '夏日重現'), field('avatarPreset', 'sun'), file('avatar', jpeg)]
+      parts: [field('name', '暖暖'), field('series', '夏日重現'), file('avatar', jpeg)]
     }))
-    expect(doll).toMatchObject({ name: '暖暖', series: '夏日重現', avatarPreset: 'sun', checkinCount: 0, lastUsedAt: null })
+    expect(doll).toMatchObject({ name: '暖暖', series: '夏日重現', checkinCount: 0, lastUsedAt: null })
     expect(doll.avatar).toMatch(/^\/uploads\/avatar-[a-f0-9]+\.jpg$/)
     expect(handlers.list(event({ token: owner.token })).dolls).toHaveLength(1)
   })
@@ -170,7 +169,7 @@ describe('娃娃檔案的建立與擁有權', () => {
     const owner = signIn(OWNER_DISCORD_ID, '娃娃主人')
     const { MAX_DOLLS_PER_USER } = await import('../server/utils/dolls')
     for (let index = 0; index < MAX_DOLLS_PER_USER; index += 1) {
-      database.createDoll(owner.id, { name: `娃娃 ${index}`, series: null, avatarPreset: 'sun' }, null)
+      database.createDoll(owner.id, { name: `娃娃 ${index}`, series: null }, null)
     }
     await expect(handlers.create(event({ token: owner.token, parts: [field('name', '再一隻')] })))
       .rejects.toMatchObject({ statusCode: 409 })
@@ -230,7 +229,7 @@ describe('頭像的歸屬', () => {
   })
 
   it('refuses to publish with no avatar at all', async () => {
-    // 「預設頭像」已經不存在了，clearAvatar 不再是一條可以什麼都不留的退路。
+    // 那張畫出來的預設頭像已經不存在了，clearAvatar 不再是一條可以什麼都不留的退路。
     const { handlers, signIn, event, uploadedFiles } = await loadContext()
     const owner = signIn(OWNER_DISCORD_ID, '娃娃主人')
     const { doll } = await handlers.create(event({ token: owner.token, parts: [field('name', '暖暖'), file('avatar', jpeg)] }))

@@ -20,10 +20,7 @@ const form = reactive({
   dollId: null as number | null,
   nickname: '', location: '', countryCode: DEFAULT_COUNTRY_CODE, county: '',
   latitude: null as number | null, longitude: null as number | null,
-  // avatarPreset 已經沒有選擇器（頭像一律用上傳裁切的那張），但欄位保留：
-  // 舊資料與舊娃娃檔案裡存著 leaf／ocean 之類的值，選到那些娃娃時要原樣帶回去，
-  // 才不會因為送出 'sun' 而把它們既有的預設頭像默默改掉。
-  dollName: '', series: '', message: '', visitedAt: today, avatarPreset: 'sun'
+  dollName: '', series: '', message: '', visitedAt: today
 })
 const dollPicker = ref<{ lastNickname: string | null } | null>(null)
 // 從草稿接手時不要讓選擇器自動選「上次用的」—— 草稿存的是使用者當初的選擇。
@@ -40,7 +37,7 @@ const storedPhoto = ref<string | null>(null)
 const avatar = ref<File | null>(null)
 const storedAvatar = ref<string | null>(null)
 // 使用者按下「移除自訂頭像」而草稿裡本來有一張時，要明確告訴伺服器「清掉」，
-// 否則發佈時會沿用草稿那張，畫面上明明已經切回預設頭像卻沒有生效。
+// 否則發佈時會沿用草稿那張，畫面上明明已經清掉了卻沒有生效。
 const clearAvatar = ref(false)
 const submitting = ref(false)
 const savingDraft = ref(false)
@@ -93,7 +90,6 @@ function applyDoll(doll: Doll | null) {
   if (!doll) return
   form.dollName = doll.name
   form.series = doll.series || ''
-  form.avatarPreset = doll.avatarPreset
   // 這一則要用的頭像由伺服器依 dollId 從檔案複製一份，所以這裡只負責預覽
   storedAvatar.value = doll.avatar
   avatar.value = null
@@ -158,7 +154,6 @@ async function loadDraft(id: number) {
     form.series = draft.series || ''
     form.message = draft.message || ''
     form.visitedAt = draft.visitedAt || today
-    form.avatarPreset = draft.avatarPreset
     storedPhoto.value = draft.photo
     storedAvatar.value = draft.avatar
     draftNotice.value = `已載入 ${formatCommentDate(draft.updatedAt)} 的草稿，補完後就能發佈。`
@@ -278,7 +273,7 @@ useHead({ title: '寫下這一站｜未完旅箋' })
             <!-- 選了有頭像的娃娃時檔案還在伺服器上，裁切器本身載不了既有圖，
                  所以另外顯示一次：否則畫面上只有一個空的上傳框，看起來像還沒填。 -->
             <div v-if="storedAvatar" class="doll-current-avatar">
-              <DollAvatar :src="storedAvatar" :preset="form.avatarPreset" alt="這則旅箋要用的頭像" size="large" />
+              <DollAvatar :src="storedAvatar" alt="這則旅箋要用的頭像" size="large" />
               <span>這則旅箋會用這張頭像。重新上傳可以換掉。</span>
             </div>
             <AvatarCropper @change="setAvatar" />

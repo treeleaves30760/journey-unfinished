@@ -6,7 +6,7 @@ import { removeSavedImage } from '../../utils/uploads'
 import { parseId } from '../../utils/validation'
 
 /**
- * 種子資料與舊資料的 user_id 是 NULL（見 database.ts 的 seed()），這些旅箋沒有擁有者。
+ * 早期匿名寫下的旅箋 user_id 是 NULL，這些旅箋沒有擁有者。
  * 兩邊都先確認是整數再比對，null／undefined 出現在任何一邊都直接算「非擁有者」，
  * 不讓任何寬鬆比較有機會把無主旅箋認成某個人的。
  */

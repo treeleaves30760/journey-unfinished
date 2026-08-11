@@ -135,7 +135,7 @@ Discord Embedded App SDK 是 Discord Activity 與 Discord Client 之間的 RPC �
 - SQLite：`./data/journey-unfinished.sqlite`
 - 圖片：`./data/uploads/`
 
-首次啟動會自動建立資料表與示範旅箋。
+首次啟動會自動建立資料表。站上不帶任何示範旅箋——全新安裝就是一張空地圖，第一則旅箋由使用者自己寫下。
 若同一目錄已有舊版 `wa-trip.sqlite` 且新版檔案尚未建立，應用程式會繼續使用舊資料庫，避免改名造成資料遺失。
 
 ## 測試、稽核與 production build
@@ -177,7 +177,7 @@ npm run start
 - CSRF：`Origin`／`Referer` 退階判定與缺兩者時的拒絕
 - 內容衛生：NFC 正規化長度、控制字元、零寬／雙向字元（但不誤殺 ZWJ emoji）、連結數量
 - 留言分層限流、單篇上限與重複內容指紋
-- 旅箋擁有者自刪的權限矩陣（含 `user_id` 為 NULL 的種子資料）
+- 旅箋擁有者自刪的權限矩陣（含 `user_id` 為 NULL 的無主舊資料）
 - Markdown 解析器：語法覆蓋、找不到成對符號時不吞掉後文、巢狀深度上限，以及「HTML 與 `javascript:` 連結不會產生可執行節點」的安全回歸
 - 區域代碼對照表的唯一性與格式，以及「介面不得再冒出國旗」的回歸測試
 - 地理編碼上游：Nominatim 與 Photon 兩種回應格式的正規化（含 GeoJSON 經緯度順序）、查詢快取、節流與排隊上限、上游失敗的錯誤對應

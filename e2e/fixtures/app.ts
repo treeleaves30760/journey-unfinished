@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import sharp from 'sharp'
@@ -59,9 +60,53 @@ export async function seedApplication() {
   insertSession.run(sessionHash(sessionTokens.member), userIds.get(identities.member.discordId), future)
   insertSession.run(sessionHash(sessionTokens.expired), userIds.get(identities.expired.discordId), expired)
   insertSession.run(sessionHash(sessionTokens.revocable), userIds.get(identities.member.discordId), future)
-  const firstCheckin = db.prepare('SELECT id FROM checkins ORDER BY id LIMIT 1').get() as { id: number }
+  await seedCheckins(db, userIds.get(identities.member.discordId)!)
+  const firstCheckin = db.prepare(`SELECT id FROM checkins WHERE nickname = '${FIXTURE_NICKNAME}' ORDER BY id LIMIT 1`)
+    .get() as { id: number }
   db.close()
   return { firstCheckinId: firstCheckin.id }
+}
+
+// 應用程式本身不再帶示範資料 —— 全新安裝就是一張空地圖。需要有旅箋才跑得動的測試
+// （詳情頁的版面、留言、地圖側欄）因此得自己準備，這也讓它們不再受應用程式示範內容改動的影響。
+const FIXTURE_NICKNAME = 'E2E 旅人'
+
+async function seedCheckins(db: Database.Database, userId: number) {
+  // 每個 beforeEach 都會呼叫 seedApplication，所以這裡必須是冪等的：已經鋪好就直接離開，
+  // 否則跑完整輪測試會累積出幾十則一模一樣的旅箋。
+  const existing = db.prepare(`SELECT COUNT(*) AS count FROM checkins WHERE nickname = '${FIXTURE_NICKNAME}'`)
+    .get() as { count: number }
+  if (existing.count) return
+
+  const uploadDir = path.join(process.env.JOURNEY_UNFINISHED_E2E_DIR!, 'uploads')
+  fs.mkdirSync(uploadDir, { recursive: true })
+  // 圖檔要真的存在：詳情頁與卡片會把它算進版面，破圖會讓版面測試量到錯的高度。
+  async function writeImage(name: string, background: string) {
+    fs.writeFileSync(path.join(uploadDir, name), await sampleJpeg(background))
+    return `/uploads/${name}`
+  }
+
+  const rows = [
+    { location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府', latitude: 35.0169, longitude: 135.6716, dollName: '小柚', series: '夏日重現', message: '## 竹林的清晨\n\n六點的竹林還沒有人，只有風。\n\n- 記得帶**廣角鏡**\n- 回程繞去渡月橋', visitedAt: '2025-11-03' },
+    { location: '淡水漁人碼頭', countryCode: 'TW', county: '新北市', latitude: 25.1826, longitude: 121.4106, dollName: '暖暖', series: null, message: '追到一場橘粉色的夕陽，海風把今天吹得很溫柔。', visitedAt: '2025-05-18' },
+    { location: 'Reynisfjara 黑沙灘', countryCode: 'IS', county: 'Suðurland', latitude: 63.4056, longitude: -19.0448, dollName: '雪球', series: null, message: '浪很大、風更大，但玄武岩柱像一整排管風琴。', visitedAt: '2025-09-21' }
+  ]
+  const insert = db.prepare(`
+    INSERT INTO checkins
+      (user_id, nickname, location, country_code, county, latitude, longitude, doll_name, series, message, visited_at, photo, avatar)
+    VALUES
+      (@userId, @nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @series, @message, @visitedAt, @photo, @avatar)`)
+
+  let firstId: number | null = null
+  for (const [index, row] of rows.entries()) {
+    const photo = await writeImage(`photo-e2e-fixture-${index}.jpg`, '#d9677e')
+    const avatar = await writeImage(`avatar-e2e-fixture-${index}.jpg`, '#3f705d')
+    const result = insert.run({ ...row, userId, nickname: FIXTURE_NICKNAME, photo, avatar })
+    if (firstId === null) firstId = Number(result.lastInsertRowid)
+  }
+  // 留言測試要有一則已經存在的留言才驗得到「新留言接在既有的後面」
+  db.prepare('INSERT INTO comments (checkin_id, nickname, message) VALUES (?, ?, ?)')
+    .run(firstId, '路過的旅人', '夕陽顏色好夢幻，下次也想帶娃娃去！')
 }
 
 /**

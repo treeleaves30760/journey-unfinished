@@ -13,13 +13,11 @@ const removingId = ref<number | null>(null)
 const formError = ref('')
 const listError = ref('')
 
-// avatarPreset 已經沒有選擇器（頭像一律用上傳裁切的那張），但欄位保留：
-// 舊檔案裡存著 leaf／ocean 之類的值，編輯時要原樣送回去，才不會默默改掉既有的預設頭像。
-const form = reactive({ name: '', series: '', avatarPreset: 'sun' })
+const form = reactive({ name: '', series: '' })
 const avatar = ref<File | null>(null)
 const storedAvatar = ref<string | null>(null)
 // 使用者按了「移除自訂頭像」而檔案裡本來有一張時，要明確告訴伺服器清空 ——
-// 不然更新會沿用原圖，畫面上明明已經切回預設頭像卻沒有生效。
+// 不然更新會沿用原圖，畫面上明明已經清掉了卻沒有生效。
 const clearAvatar = ref(false)
 // AvatarCropper 沒有「載入既有圖片」的能力，換一個 key 就能讓它整個重來，
 // 這是最省事也最不會殘留舊狀態的重置方式。
@@ -30,7 +28,6 @@ const isOpen = computed(() => creating.value || editingId.value !== null)
 function resetForm() {
   form.name = ''
   form.series = ''
-  form.avatarPreset = 'sun'
   avatar.value = null
   storedAvatar.value = null
   clearAvatar.value = false
@@ -50,7 +47,6 @@ function startEdit(doll: Doll) {
   editingId.value = doll.id
   form.name = doll.name
   form.series = doll.series || ''
-  form.avatarPreset = doll.avatarPreset
   storedAvatar.value = doll.avatar
 }
 
@@ -78,7 +74,6 @@ async function save() {
   const body = new FormData()
   body.append('name', form.name)
   if (form.series) body.append('series', form.series)
-  body.append('avatarPreset', form.avatarPreset)
   if (avatar.value) body.append('avatar', avatar.value)
   if (clearAvatar.value && !avatar.value) body.append('clearAvatar', '1')
 
@@ -154,7 +149,7 @@ useHead({ title: '我的娃娃｜未完旅箋' })
           <label class="field"><span>作品出處 <small>原創娃娃可以留空</small></span><input v-model.trim="form.series" maxlength="60" placeholder="這隻娃娃出自哪部作品？"></label>
         </div>
         <div v-if="storedAvatar" class="doll-current-avatar">
-          <DollAvatar :src="storedAvatar" :preset="form.avatarPreset" alt="目前的自訂頭像" size="large" />
+          <DollAvatar :src="storedAvatar" alt="目前的自訂頭像" size="large" />
           <span>目前使用這張自訂頭像。重新上傳或按「移除自訂頭像」可以換掉。</span>
         </div>
         <AvatarCropper :key="cropperKey" @change="setAvatar" />
@@ -174,7 +169,7 @@ useHead({ title: '我的娃娃｜未完旅箋' })
 
       <ul v-else-if="dolls.length" class="doll-list">
         <li v-for="doll in dolls" :key="doll.id" class="doll-card">
-          <DollAvatar :src="doll.avatar" :preset="doll.avatarPreset" :alt="`${doll.name}的頭像`" size="large" />
+          <DollAvatar :src="doll.avatar" :alt="`${doll.name}的頭像`" size="large" />
           <div class="doll-card-body">
             <strong>{{ doll.name }}</strong>
             <small v-if="doll.series" class="card-series">✎ {{ doll.series }}</small>
