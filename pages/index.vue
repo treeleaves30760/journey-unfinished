@@ -194,7 +194,7 @@ onBeforeUnmount(() => panelObserver?.disconnect())
             <Transition name="fade" mode="out-in">
               <article v-if="selected" :key="selected.id" class="selected-story">
                 <button class="close-story" aria-label="關閉摘要" @click="selected = null">×</button>
-                <DollAvatar :src="selected.avatar" :preset="selected.avatarPreset" :alt="`${selected.nickname}頭像`" size="large" />
+                <DollAvatar :src="selected.avatar" :photo="selected.photo" :preset="selected.avatarPreset" :alt="`${selected.nickname}頭像`" size="large" />
                 <span class="county-chip">{{ placeLabel(selected) }}</span>
                 <h3>{{ selected.location }}</h3>
                 <p>{{ markdownToPlainText(selected.message, 140) }}</p>
@@ -203,7 +203,7 @@ onBeforeUnmount(() => panelObserver?.disconnect())
               </article>
               <div v-else class="story-list">
                 <button v-for="item in filtered.slice(0, 4)" :key="item.id" type="button" :aria-label="`查看 ${item.location} 的故事摘要`" @click="selectCheckin(item)">
-                  <DollAvatar :src="item.avatar" :preset="item.avatarPreset" alt="" size="small" />
+                  <DollAvatar :src="item.avatar" :photo="item.photo" :preset="item.avatarPreset" alt="" size="small" />
                   <span><strong>{{ item.location }}</strong><small>{{ item.nickname }} 與 {{ item.dollName }}</small></span><i aria-hidden="true">›</i>
                 </button>
                 <p v-if="!filtered.length" class="map-side-empty">沒有符合篩選條件的旅箋，換個條件看看吧。</p>

@@ -18,7 +18,7 @@ const place = computed(() => placeLabel(props.checkin))
     </NuxtLink>
     <div class="card-body">
       <div class="card-author">
-        <DollAvatar :src="checkin.avatar" :preset="checkin.avatarPreset" :alt="`${checkin.nickname}的頭像`" size="small" />
+        <DollAvatar :src="checkin.avatar" :photo="checkin.photo" :preset="checkin.avatarPreset" :alt="`${checkin.nickname}的頭像`" size="small" />
         <div><strong>{{ checkin.nickname }}・{{ checkin.dollName }}</strong><time :datetime="checkin.visitedAt">{{ formatDate(checkin.visitedAt) }}</time></div>
       </div>
       <NuxtLink :to="`/checkins/${checkin.id}`"><h3>{{ checkin.location }}</h3></NuxtLink>

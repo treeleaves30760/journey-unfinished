@@ -30,6 +30,8 @@ const dollPicker = ref<{ lastNickname: string | null } | null>(null)
 const autoSelectDoll = ref(true)
 
 const photoInput = ref<HTMLInputElement | null>(null)
+// AvatarCropper 內部的 file input 沒有對外暴露 ref，包一層容器就能在驗證失敗時把焦點送進去
+const avatarUpload = ref<HTMLElement | null>(null)
 const photo = ref<File | null>(null)
 const photoPreview = ref<string | null>(null)
 // 從草稿接手時，照片已經在伺服器上了：這裡記住它的網址，讓「照片必填」的檢查通過，
@@ -44,12 +46,16 @@ const submitting = ref(false)
 const savingDraft = ref(false)
 const submitError = ref('')
 const photoError = ref('')
+const avatarError = ref('')
 const draftNotice = ref('')
 const draftId = ref<number | null>(null)
 const loadingDraft = ref(false)
 
 const hasPhoto = computed(() => Boolean(photo.value || storedPhoto.value))
 const previewSrc = computed(() => photoPreview.value || storedPhoto.value)
+// 這次剛裁好的、娃娃檔案帶進來的、草稿存著的，三種來源都算數：選了有頭像的娃娃時
+// 檔案並不會經過這台瀏覽器，storedAvatar 就是那張圖的位址（實際的複製在伺服器做）。
+const hasAvatar = computed(() => Boolean(avatar.value || storedAvatar.value))
 
 // LocationPicker 用一個物件收斂五個相關欄位；這裡把它接回扁平的 form，
 // 讓送出時的 FormData 組法維持原樣。
@@ -65,7 +71,7 @@ const place = computed<PlaceValue>({
 })
 
 const stepCompletion = computed(() => [
-  Boolean(form.nickname && form.dollName),
+  Boolean(form.nickname && form.dollName && hasAvatar.value),
   Boolean(form.location && form.county && form.latitude !== null && form.longitude !== null),
   Boolean(form.visitedAt && form.message && hasPhoto.value)
 ])
@@ -111,6 +117,7 @@ function choosePhoto(event: Event) {
 
 function setAvatar(file: File | null) {
   avatar.value = file
+  avatarError.value = ''
   if (file) {
     storedAvatar.value = null
     clearAvatar.value = false
@@ -195,6 +202,13 @@ async function saveDraft() {
 async function submit() {
   if (submitting.value) return
   submitError.value = ''
+  // 頭像與照片一樣是必填。沒有頭像的旅箋在列表上只剩一個空的色圓，
+  // 這個檢查是為了不再產生那種資料；草稿不受限制，它本來就是還沒寫完的東西。
+  if (!hasAvatar.value) {
+    avatarError.value = '請上傳一張照片裁成娃娃的頭像，或在上面選一隻已經有頭像的娃娃。'
+    nextTick(() => avatarUpload.value?.querySelector('input')?.focus())
+    return
+  }
   if (!hasPhoto.value) {
     photoError.value = '請先選擇一張旅途照片。'
     nextTick(() => photoInput.value?.focus())
@@ -259,7 +273,17 @@ useHead({ title: '寫下這一站｜未完旅箋' })
             <label class="field"><span>娃娃名稱 <b>*</b></span><input v-model.trim="form.dollName" required maxlength="40" placeholder="例如：暖暖"></label>
           </div>
           <label class="field"><span>作品出處 <small>原創娃娃可以留空</small></span><input v-model.trim="form.series" maxlength="60" placeholder="這隻娃娃出自哪部作品？"></label>
-          <AvatarCropper @change="setAvatar" />
+          <div ref="avatarUpload" class="field-block">
+            <span class="field-block-label">娃娃頭像 <b>*</b></span>
+            <!-- 選了有頭像的娃娃時檔案還在伺服器上，裁切器本身載不了既有圖，
+                 所以另外顯示一次：否則畫面上只有一個空的上傳框，看起來像還沒填。 -->
+            <div v-if="storedAvatar" class="doll-current-avatar">
+              <DollAvatar :src="storedAvatar" :preset="form.avatarPreset" alt="這則旅箋要用的頭像" size="large" />
+              <span>這則旅箋會用這張頭像。重新上傳可以換掉。</span>
+            </div>
+            <AvatarCropper @change="setAvatar" />
+            <p v-if="avatarError" class="field-error" role="alert">{{ avatarError }}</p>
+          </div>
         </section>
 
         <section class="form-card">

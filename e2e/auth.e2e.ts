@@ -104,7 +104,9 @@ test('authenticated creation stores server-derived ownership and admin deletion 
       userId: '999999',
       // 必須是真的能被解碼的 JPEG：上傳路徑會用 sharp 重新編碼以剝除 EXIF/GPS，
       // 只湊出 magic bytes 的假檔案會在解碼階段被擋成 415，測不到後面的擁有權與刪檔。
-      photo: { name: 'trip.jpg', mimeType: 'image/jpeg', buffer: await sampleJpeg() }
+      photo: { name: 'trip.jpg', mimeType: 'image/jpeg', buffer: await sampleJpeg() },
+      // 頭像與照片同級必填
+      avatar: { name: 'avatar.jpg', mimeType: 'image/jpeg', buffer: await sampleJpeg('#3f705d') }
     }
   })
   const responseBody = await response.json() as { checkin?: { id: number, photo: string }, message?: string }

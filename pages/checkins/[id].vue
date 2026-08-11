@@ -92,7 +92,7 @@ useHead(() => ({
           <span class="eyebrow">A PAGE ALONG THE WAY</span>
           <span class="county-chip">{{ placeLabel(data.checkin) }}</span>
           <h1>{{ data.checkin.location }}</h1>
-          <div class="detail-author"><DollAvatar :src="data.checkin.avatar" :preset="data.checkin.avatarPreset" :alt="`${data.checkin.nickname}的頭像`" size="medium" /><div><strong>{{ data.checkin.nickname }} 與 {{ data.checkin.dollName }}</strong><time :datetime="data.checkin.visitedAt">{{ formatDate(data.checkin.visitedAt) }}</time></div></div>
+          <div class="detail-author"><DollAvatar :src="data.checkin.avatar" :photo="data.checkin.photo" :preset="data.checkin.avatarPreset" :alt="`${data.checkin.nickname}的頭像`" size="medium" /><div><strong>{{ data.checkin.nickname }} 與 {{ data.checkin.dollName }}</strong><time :datetime="data.checkin.visitedAt">{{ formatDate(data.checkin.visitedAt) }}</time></div></div>
           <!-- 旅途留言支援 Markdown。MarkdownView 全程用 h() 產生節點，不經過 v-html，
                所以留言裡的 HTML 只會被當成文字顯示（詳見 utils/markdown.ts 的說明）。 -->
           <MarkdownView class="detail-message" :source="data.checkin.message" />

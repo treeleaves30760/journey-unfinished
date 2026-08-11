@@ -55,17 +55,18 @@ export interface CheckinComment {
 }
 
 /**
- * 六種內建頭像。**已經不再提供選擇**——娃娃的頭像一律是使用者上傳照片裁出來的那張，
- * 這份清單只剩下算繪既有資料的用途：資料庫裡（示範資料與早期寫下的旅箋）仍存著
- * leaf／ocean 之類的值，刪掉這份對照表會讓那些旅箋的頭像一起變樣。
+ * 六個內建色調。**已經不再提供選擇，而且不再是「一張預設頭像」**——娃娃的頭像一律是
+ * 使用者上傳照片裁出來的那張，沒有的話退回這則旅箋自己的旅途照片。這份清單只剩下
+ * 顏色的用途：資料庫裡（早期寫下的旅箋）仍存著 leaf／ocean 之類的值，刪掉這份對照表
+ * 會讓那些旅箋的圓圈一起變色。
  */
 export const avatarChoices = [
-  { id: 'sun', label: '暖陽', face: '☀' },
-  { id: 'leaf', label: '森芽', face: '♣' },
-  { id: 'berry', label: '莓果', face: '●' },
-  { id: 'ocean', label: '海浪', face: '≈' },
-  { id: 'cloud', label: '雲朵', face: '☁' },
-  { id: 'peach', label: '蜜桃', face: '♥' }
+  { id: 'sun', label: '暖陽' },
+  { id: 'leaf', label: '森芽' },
+  { id: 'berry', label: '莓果' },
+  { id: 'ocean', label: '海浪' },
+  { id: 'cloud', label: '雲朵' },
+  { id: 'peach', label: '蜜桃' }
 ]
 
 // 臺灣的縣市清單。全球化之後「行政區」欄位本身是自由文字（世界上沒有一份值得內建的
@@ -106,10 +107,6 @@ export function placeLabel(checkin: Pick<Checkin, 'countryCode' | 'county'>) {
 
 export function avatarClass(preset: string) {
   return `avatar-${avatarChoices.some(choice => choice.id === preset) ? preset : 'sun'}`
-}
-
-export function avatarFace(preset: string) {
-  return avatarChoices.find(choice => choice.id === preset)?.face || '☀'
 }
 
 export function formatDate(value: string) {

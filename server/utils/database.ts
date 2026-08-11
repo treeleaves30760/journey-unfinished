@@ -131,23 +131,26 @@ function seed(db: SQLiteDatabase) {
     return
   }
 
+  // 示範資料沒有圖檔可以放，所以 avatar 與 photo 都是 NULL。avatar_preset 也刻意不指定：
+  // 它現在只是圓圈的顏色，而不是一張「預設頭像」，給示範資料六種不同顏色只會讓人以為
+  // 那是可以選的東西。全部落在欄位預設值 'sun' 上。
   const insert = db.prepare(`
     INSERT INTO checkins
-      (nickname, location, country_code, county, latitude, longitude, doll_name, message, visited_at, avatar_preset)
+      (nickname, location, country_code, county, latitude, longitude, doll_name, message, visited_at)
     VALUES
-      (@nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @message, @visitedAt, @avatarPreset)`)
+      (@nickname, @location, @countryCode, @county, @latitude, @longitude, @dollName, @message, @visitedAt)`)
 
   // 示範資料刻意跨到臺灣以外，讓全新安裝一打開就看得出地圖是全球的，
   // 而不是要等第一則海外旅箋寫下來才發現支援。留言也順便示範 Markdown 的小標與清單。
   const examples = [
-    { nickname: '小晴', location: '淡水漁人碼頭', countryCode: 'TW', county: '新北市', latitude: 25.1826, longitude: 121.4106, dollName: '暖暖', message: '追到一場橘粉色的夕陽，海風把今天吹得很溫柔。', visitedAt: '2025-05-18', avatarPreset: 'sun' },
-    { nickname: '森友', location: '阿里山森林遊樂區', countryCode: 'TW', county: '嘉義縣', latitude: 23.5102, longitude: 120.8024, dollName: '芽芽', message: '一起搭小火車穿過霧氣，巨木林像童話的入口。', visitedAt: '2025-04-09', avatarPreset: 'leaf' },
-    { nickname: '海鹽', location: '三仙台', countryCode: 'TW', county: '臺東縣', latitude: 23.123, longitude: 121.409, dollName: '藍藍', message: '清晨的浪一層一層發亮，這次也留下最喜歡的合照。', visitedAt: '2025-03-22', avatarPreset: 'ocean' },
-    { nickname: '米粒', location: '日月潭向山', countryCode: 'TW', county: '南投縣', latitude: 23.8515, longitude: 120.9021, dollName: '糰子', message: '沿著湖畔散步，雲朵和山都倒映在安靜的水面。', visitedAt: '2025-02-14', avatarPreset: 'cloud' },
-    { nickname: '莓果', location: '高美濕地', countryCode: 'TW', county: '臺中市', latitude: 24.3118, longitude: 120.5492, dollName: '莓莓', message: '風車、潮間帶和小小的腳印，都是今天的旅行紀念。', visitedAt: '2025-01-26', avatarPreset: 'berry' },
-    { nickname: '桃桃', location: '旗津彩虹教堂', countryCode: 'TW', county: '高雄市', latitude: 22.6101, longitude: 120.2664, dollName: '小桃', message: '南方的陽光正好，和最可愛的旅伴看了整片藍色海岸。', visitedAt: '2024-12-08', avatarPreset: 'peach' },
-    { nickname: '柚子', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府', latitude: 35.0169, longitude: 135.6716, dollName: '小柚', message: '## 竹林的清晨\n\n六點的竹林還沒有人，只有風。\n\n- 記得帶**廣角鏡**\n- 回程繞去渡月橋\n\n> 下次想在秋天再來一次。', visitedAt: '2025-11-03', avatarPreset: 'leaf' },
-    { nickname: '北緯', location: 'Reynisfjara 黑沙灘', countryCode: 'IS', county: 'Suðurland', latitude: 63.4056, longitude: -19.0448, dollName: '雪球', message: '浪很大、風更大，但玄武岩柱像一整排管風琴。\n\n把旅伴放在石階上拍了整捲底片。', visitedAt: '2025-09-21', avatarPreset: 'ocean' }
+    { nickname: '小晴', location: '淡水漁人碼頭', countryCode: 'TW', county: '新北市', latitude: 25.1826, longitude: 121.4106, dollName: '暖暖', message: '追到一場橘粉色的夕陽，海風把今天吹得很溫柔。', visitedAt: '2025-05-18' },
+    { nickname: '森友', location: '阿里山森林遊樂區', countryCode: 'TW', county: '嘉義縣', latitude: 23.5102, longitude: 120.8024, dollName: '芽芽', message: '一起搭小火車穿過霧氣，巨木林像童話的入口。', visitedAt: '2025-04-09' },
+    { nickname: '海鹽', location: '三仙台', countryCode: 'TW', county: '臺東縣', latitude: 23.123, longitude: 121.409, dollName: '藍藍', message: '清晨的浪一層一層發亮，這次也留下最喜歡的合照。', visitedAt: '2025-03-22' },
+    { nickname: '米粒', location: '日月潭向山', countryCode: 'TW', county: '南投縣', latitude: 23.8515, longitude: 120.9021, dollName: '糰子', message: '沿著湖畔散步，雲朵和山都倒映在安靜的水面。', visitedAt: '2025-02-14' },
+    { nickname: '莓果', location: '高美濕地', countryCode: 'TW', county: '臺中市', latitude: 24.3118, longitude: 120.5492, dollName: '莓莓', message: '風車、潮間帶和小小的腳印，都是今天的旅行紀念。', visitedAt: '2025-01-26' },
+    { nickname: '桃桃', location: '旗津彩虹教堂', countryCode: 'TW', county: '高雄市', latitude: 22.6101, longitude: 120.2664, dollName: '小桃', message: '南方的陽光正好，和最可愛的旅伴看了整片藍色海岸。', visitedAt: '2024-12-08' },
+    { nickname: '柚子', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府', latitude: 35.0169, longitude: 135.6716, dollName: '小柚', message: '## 竹林的清晨\n\n六點的竹林還沒有人，只有風。\n\n- 記得帶**廣角鏡**\n- 回程繞去渡月橋\n\n> 下次想在秋天再來一次。', visitedAt: '2025-11-03' },
+    { nickname: '北緯', location: 'Reynisfjara 黑沙灘', countryCode: 'IS', county: 'Suðurland', latitude: 63.4056, longitude: -19.0448, dollName: '雪球', message: '浪很大、風更大，但玄武岩柱像一整排管風琴。\n\n把旅伴放在石階上拍了整捲底片。', visitedAt: '2025-09-21' }
   ]
   const transaction = db.transaction(() => {
     let firstId: number | null = null

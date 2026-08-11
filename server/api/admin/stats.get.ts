@@ -142,12 +142,12 @@ export default defineEventHandler((event) => {
   // ／dollName／visitedAt 是為了讓管理頁能直接重用 pages/admin/index.vue 那份
   // 「旅箋管理」列表的既有樣式（DollAvatar + 位置 + 暱稱與娃娃 + 造訪日期），不必另外畫一套。
   const recentCheckins = db.prepare(`
-    SELECT id, location, nickname, county, doll_name AS dollName, avatar, avatar_preset AS avatarPreset,
+    SELECT id, location, nickname, county, doll_name AS dollName, photo, avatar, avatar_preset AS avatarPreset,
       visited_at AS visitedAt, created_at AS createdAt
     FROM checkins ORDER BY created_at DESC, id DESC LIMIT ?
   `).all(RECENT_ACTIVITY_LIMIT) as Array<{
     id: number, location: string, nickname: string, county: string, dollName: string,
-    avatar: string | null, avatarPreset: string, visitedAt: string, createdAt: string
+    photo: string | null, avatar: string | null, avatarPreset: string, visitedAt: string, createdAt: string
   }>
 
   const recentComments = db.prepare(`
