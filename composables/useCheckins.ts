@@ -17,7 +17,6 @@ export interface Checkin {
   visitedAt: string
   photo: string | null
   avatar: string | null
-  avatarPreset: string
   createdAt: string
   commentCount: number
 }
@@ -42,7 +41,6 @@ export interface Draft {
   visitedAt: string | null
   photo: string | null
   avatar: string | null
-  avatarPreset: string
   createdAt: string
   updatedAt: string
 }
@@ -53,20 +51,6 @@ export interface CheckinComment {
   message: string
   createdAt: string
 }
-
-/**
- * 六種內建頭像。**已經不再提供選擇**——娃娃的頭像一律是使用者上傳照片裁出來的那張，
- * 這份清單只剩下算繪既有資料的用途：資料庫裡（示範資料與早期寫下的旅箋）仍存著
- * leaf／ocean 之類的值，刪掉這份對照表會讓那些旅箋的頭像一起變樣。
- */
-export const avatarChoices = [
-  { id: 'sun', label: '暖陽', face: '☀' },
-  { id: 'leaf', label: '森芽', face: '♣' },
-  { id: 'berry', label: '莓果', face: '●' },
-  { id: 'ocean', label: '海浪', face: '≈' },
-  { id: 'cloud', label: '雲朵', face: '☁' },
-  { id: 'peach', label: '蜜桃', face: '♥' }
-]
 
 // 臺灣的縣市清單。全球化之後「行政區」欄位本身是自由文字（世界上沒有一份值得內建的
 // 全球一級行政區清單），這份清單只在區域選到臺灣時當成下拉選項，維持既有資料的一致寫法。
@@ -86,7 +70,6 @@ export interface Doll {
   name: string
   series: string | null
   avatar: string | null
-  avatarPreset: string
   createdAt: string
   updatedAt: string
   lastUsedAt: string | null
@@ -102,14 +85,6 @@ export function placeLabel(checkin: Pick<Checkin, 'countryCode' | 'county'>) {
   if (!checkin.county) return region
   // 臺灣的縣市名稱本身已經夠明確，再冠一次上層區域只是雜訊
   return checkin.countryCode === 'TW' ? checkin.county : `${region}・${checkin.county}`
-}
-
-export function avatarClass(preset: string) {
-  return `avatar-${avatarChoices.some(choice => choice.id === preset) ? preset : 'sun'}`
-}
-
-export function avatarFace(preset: string) {
-  return avatarChoices.find(choice => choice.id === preset)?.face || '☀'
 }
 
 export function formatDate(value: string) {

@@ -12,8 +12,7 @@ const validCheckin = {
   longitude: '121.535',
   dollName: '小櫻',
   message: '今天一起來散步。',
-  visitedAt: '2026-03-15',
-  avatarPreset: 'sakura'
+  visitedAt: '2026-03-15'
 }
 
 // 這裡測的字元全都是看不見的，直接把原字元貼進原始碼的話，經過複製、格式化或編輯器的
@@ -26,20 +25,19 @@ const tooManyRequests = expect.objectContaining({ statusCode: 429 })
 
 describe('validateCheckin', () => {
   it('normalizes a valid check-in', () => {
-    expect(validateCheckin({ ...validCheckin, avatarPreset: 'peach' })).toMatchObject({
+    expect(validateCheckin(validCheckin)).toMatchObject({
       nickname: '旅人小花',
       countryCode: 'TW',
       county: '臺北市',
       latitude: 25.033,
-      longitude: 121.535,
-      avatarPreset: 'peach'
+      longitude: 121.535
     })
   })
 
   // 全球化之後座標範圍就是整顆地球。這裡釘住的是「邊界值可用、超出邊界擋下」，
   // 而不是任何單一區域的範圍——把地圖鎖在臺灣，就等於把海外旅箋鎖在畫面外。
   it('accepts coordinates anywhere on earth and rejects impossible ones', () => {
-    const iceland = { ...validCheckin, avatarPreset: 'peach', countryCode: 'IS', county: 'Suðurland' }
+    const iceland = { ...validCheckin, countryCode: 'IS', county: 'Suðurland' }
     expect(validateCheckin({ ...iceland, latitude: '63.4056', longitude: '-19.0448' })).toMatchObject({
       latitude: 63.4056, longitude: -19.0448, countryCode: 'IS'
     })
@@ -49,87 +47,82 @@ describe('validateCheckin', () => {
     expect(() => validateCheckin({ ...iceland, latitude: 'NaN' })).toThrow(badRequest)
   })
 
-  it('rejects unknown country codes and avatar presets', () => {
-    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'peach', countryCode: 'ZZ' })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'peach', countryCode: '' })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'javascript:alert(1)' })).toThrow(badRequest)
+  it('rejects unknown country codes', () => {
+    expect(() => validateCheckin({ ...validCheckin, countryCode: 'ZZ' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, countryCode: '' })).toThrow(badRequest)
   })
 
   it('accepts a lowercase country code and normalizes it', () => {
-    expect(validateCheckin({ ...validCheckin, avatarPreset: 'peach', countryCode: 'jp', county: '京都府' }))
+    expect(validateCheckin({ ...validCheckin, countryCode: 'jp', county: '京都府' }))
       .toMatchObject({ countryCode: 'JP', county: '京都府' })
   })
 
   // 行政區不再是臺灣 22 縣市的列舉：世界上沒有一份「所有區域的一級行政區」清單值得內建，
   // 所以它走的是與其他自由文字相同的衛生檢查——有長度上限，但不限制內容。
   it('takes any region name within the length limit', () => {
-    expect(validateCheckin({ ...validCheckin, avatarPreset: 'peach', countryCode: 'IS', county: 'Suðurland' }).county)
+    expect(validateCheckin({ ...validCheckin, countryCode: 'IS', county: 'Suðurland' }).county)
       .toBe('Suðurland')
-    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'peach', county: '' })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...validCheckin, avatarPreset: 'peach', county: 'a'.repeat(41) })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, county: '' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, county: 'a'.repeat(41) })).toThrow(badRequest)
   })
 })
 
 // 旅箋的自由文字同樣會公開渲染在旅箋頁上。這條路徑有 requireUser 擋著，
 // 但 Discord 帳號誰都能註冊，所以套用與留言相同的衛生規則。
 describe('validateCheckin 內容衛生', () => {
-  // validCheckin 的 avatarPreset 是刻意無效的 'sakura'，直接拿它當基底的話，
-  // 每個 throw 都會是頭像驗證先擋下來的，測不到衛生規則本身。
-  const okCheckin = { ...validCheckin, avatarPreset: 'peach' }
-
   it('rejects control characters in single-line fields', () => {
-    expect(() => validateCheckin({ ...okCheckin, nickname: `旅人${chars(0x0000)}小花` })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...okCheckin, location: `大安${chars(0x000D)}公園` })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...okCheckin, dollName: `小${chars(0x0009)}櫻` })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...okCheckin, series: `第一${chars(0x0000)}集` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, nickname: `旅人${chars(0x0000)}小花` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, location: `大安${chars(0x000D)}公園` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, dollName: `小${chars(0x0009)}櫻` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, series: `第一${chars(0x0000)}集` })).toThrow(badRequest)
   })
 
   it('rejects zero-width and bidi override characters', () => {
-    expect(() => validateCheckin({ ...okCheckin, nickname: `旅人${chars(0x200B)}小花` })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...okCheckin, location: `${chars(0x202E)}大安森林公園` })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...okCheckin, dollName: `小${chars(0xFEFF)}櫻` })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...okCheckin, series: `${chars(0x200B)}第一集` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, nickname: `旅人${chars(0x200B)}小花` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, location: `${chars(0x202E)}大安森林公園` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, dollName: `小${chars(0xFEFF)}櫻` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, series: `${chars(0x200B)}第一集` })).toThrow(badRequest)
   })
 
   it('keeps line breaks in the message but not carriage returns', () => {
-    expect(validateCheckin({ ...okCheckin, message: '第一段\n第二段' }).message).toBe('第一段\n第二段')
-    expect(() => validateCheckin({ ...okCheckin, message: `第一段${chars(0x000D)}第二段` })).toThrow(badRequest)
+    expect(validateCheckin({ ...validCheckin, message: '第一段\n第二段' }).message).toBe('第一段\n第二段')
+    expect(() => validateCheckin({ ...validCheckin, message: `第一段${chars(0x000D)}第二段` })).toThrow(badRequest)
   })
 
   // multipart 表單送出時，瀏覽器會依 HTML 規格把換行正規化成 CRLF。少了這一步，
   // 使用者在 textarea 按下的每一次 Enter 都會讓整篇旅箋被擋成 400 ——
   // 支援 Markdown 之後幾乎每一則留言都是多行的。
   it('accepts the CRLF line endings that multipart forms actually send', () => {
-    expect(validateCheckin({ ...okCheckin, message: '第一段\r\n第二段' }).message).toBe('第一段\n第二段')
-    expect(validateCheckin({ ...okCheckin, message: '## 小標\r\n\r\n- 項目一\r\n- 項目二' }).message)
+    expect(validateCheckin({ ...validCheckin, message: '第一段\r\n第二段' }).message).toBe('第一段\n第二段')
+    expect(validateCheckin({ ...validCheckin, message: '## 小標\r\n\r\n- 項目一\r\n- 項目二' }).message)
       .toBe('## 小標\n\n- 項目一\n- 項目二')
     // 長度在收斂之後才量：同一段文字不該因為傳輸編碼多算了一半的字數而被判超長
     const line = 'a'.repeat(999)
-    expect(validateCheckin({ ...okCheckin, message: `${line}\r\n${line}` }).message).toHaveLength(1_999)
+    expect(validateCheckin({ ...validCheckin, message: `${line}\r\n${line}` }).message).toHaveLength(1_999)
   })
 
   it('still refuses a lone carriage return in single-line fields', () => {
     // 單獨的 \r 不是任何平台的換行，只會被拿來偽造日誌行或製造假排版
-    expect(() => validateCheckin({ ...okCheckin, nickname: `旅人${chars(0x000D)}${chars(0x000A)}小花` })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, nickname: `旅人${chars(0x000D)}${chars(0x000A)}小花` })).toThrow(badRequest)
   })
 
   it('does not kill ZWJ emoji sequences', () => {
     const zwjFamily = `👩${chars(0x200D)}💻`
-    expect(validateCheckin({ ...okCheckin, dollName: zwjFamily }).dollName).toBe(zwjFamily)
+    expect(validateCheckin({ ...validCheckin, dollName: zwjFamily }).dollName).toBe(zwjFamily)
   })
 
   it('rejects any link in nickname, location, doll name and series', () => {
-    expect(() => validateCheckin({ ...okCheckin, nickname: '追蹤我 www.spam.example' })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...okCheckin, location: 'https://spam.example/a' })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...okCheckin, dollName: 'buy.shop' })).toThrow(badRequest)
-    expect(() => validateCheckin({ ...okCheckin, series: '追蹤我 www.spam.example' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, nickname: '追蹤我 www.spam.example' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, location: 'https://spam.example/a' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, dollName: 'buy.shop' })).toThrow(badRequest)
+    expect(() => validateCheckin({ ...validCheckin, series: '追蹤我 www.spam.example' })).toThrow(badRequest)
   })
 
   it('allows up to two links in the message and rejects the third', () => {
     const two = '參考 https://a.example 與 www.b.example'
-    expect(validateCheckin({ ...okCheckin, message: two }).message).toBe(two)
+    expect(validateCheckin({ ...validCheckin, message: two }).message).toBe(two)
     expect(() => validateCheckin({
-      ...okCheckin,
+      ...validCheckin,
       message: 'https://a.example www.b.example c.com'
     })).toThrow(badRequest)
   })
@@ -138,8 +131,8 @@ describe('validateCheckin 內容衛生', () => {
     // 2000 個 'e' + U+0301 在 JS 裡是 4000 個 UTF-16 單位，正規化後剛好卡在上限。
     // 不正規化就會被誤判成超過上限兩倍，永遠通不過。
     const decomposed = `e${chars(COMBINING_ACUTE)}`.repeat(MAX_MESSAGE_LENGTH)
-    expect(validateCheckin({ ...okCheckin, message: decomposed }).message).toHaveLength(MAX_MESSAGE_LENGTH)
-    expect(() => validateCheckin({ ...okCheckin, message: `e${chars(COMBINING_ACUTE)}`.repeat(MAX_MESSAGE_LENGTH + 1) }))
+    expect(validateCheckin({ ...validCheckin, message: decomposed }).message).toHaveLength(MAX_MESSAGE_LENGTH)
+    expect(() => validateCheckin({ ...validCheckin, message: `e${chars(COMBINING_ACUTE)}`.repeat(MAX_MESSAGE_LENGTH + 1) }))
       .toThrow(badRequest)
   })
 
@@ -148,7 +141,7 @@ describe('validateCheckin 內容衛生', () => {
   // 全程沒有 v-html），所以這裡刻意不對標記符號做任何過濾或跳脫。
   it('keeps markdown syntax in the message verbatim', () => {
     const markdown = '## 竹林的清晨\n\n- 記得帶**廣角鏡**\n- 回程繞去渡月橋\n\n> 下次想在秋天再來一次。'
-    expect(validateCheckin({ ...okCheckin, message: markdown }).message).toBe(markdown)
+    expect(validateCheckin({ ...validCheckin, message: markdown }).message).toBe(markdown)
   })
 })
 
@@ -156,24 +149,23 @@ describe('validateCheckin 內容衛生', () => {
 // 「留空／只有空白要正規化成 null」這個其他必填欄位都不需要的行為。內容本身的衛生檢查
 // （控制字元、隱藏字元、連結）已經併進上面 `validateCheckin 內容衛生` 的既有案例。
 describe('validateCheckin series 欄位（選填）', () => {
-  const okCheckin = { ...validCheckin, avatarPreset: 'peach' }
 
   it('normalizes a missing, empty or whitespace-only series to null', () => {
-    expect(validateCheckin(okCheckin).series).toBeNull()
-    expect(validateCheckin({ ...okCheckin, series: '' }).series).toBeNull()
-    expect(validateCheckin({ ...okCheckin, series: '   ' }).series).toBeNull()
+    expect(validateCheckin(validCheckin).series).toBeNull()
+    expect(validateCheckin({ ...validCheckin, series: '' }).series).toBeNull()
+    expect(validateCheckin({ ...validCheckin, series: '   ' }).series).toBeNull()
   })
 
   it('trims a provided series and keeps it', () => {
-    expect(validateCheckin({ ...okCheckin, series: '  夏日重現  ' }).series).toBe('夏日重現')
+    expect(validateCheckin({ ...validCheckin, series: '  夏日重現  ' }).series).toBe('夏日重現')
   })
 
   it('rejects a series longer than 60 characters, measured after composing to NFC', () => {
     // 60 個 'e' + U+0301 在 JS 裡是 120 個 UTF-16 單位，正規化後只剩 60 個字元，剛好卡在上限；
     // 不正規化的話會被誤判成超過上限兩倍，永遠通不過。
     const decomposed = `e${chars(COMBINING_ACUTE)}`.repeat(60)
-    expect(validateCheckin({ ...okCheckin, series: decomposed }).series).toHaveLength(60)
-    expect(() => validateCheckin({ ...okCheckin, series: `e${chars(COMBINING_ACUTE)}`.repeat(61) }))
+    expect(validateCheckin({ ...validCheckin, series: decomposed }).series).toHaveLength(60)
+    expect(() => validateCheckin({ ...validCheckin, series: `e${chars(COMBINING_ACUTE)}`.repeat(61) }))
       .toThrow(badRequest)
   })
 })
@@ -186,17 +178,17 @@ describe('validateDraft', () => {
     expect(validateDraft({})).toEqual({
       dollId: null, nickname: null, location: null, countryCode: null, county: null,
       latitude: null, longitude: null, dollName: null, series: null,
-      message: null, visitedAt: null, avatarPreset: 'sun'
+      message: null, visitedAt: null
     })
   })
 
   it('keeps whatever has been filled in so far', () => {
     expect(validateDraft({
       location: '嵐山竹林小徑', countryCode: 'jp', county: '京都府',
-      latitude: '35.0169', longitude: '135.6716', avatarPreset: 'leaf'
+      latitude: '35.0169', longitude: '135.6716'
     })).toMatchObject({
       location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
-      latitude: 35.0169, longitude: 135.6716, avatarPreset: 'leaf', message: null
+      latitude: 35.0169, longitude: 135.6716, message: null
     })
   })
 
@@ -207,7 +199,6 @@ describe('validateDraft', () => {
     expect(() => validateDraft({ countryCode: 'ZZ' })).toThrow(badRequest)
     expect(() => validateDraft({ latitude: '91' })).toThrow(badRequest)
     expect(() => validateDraft({ visitedAt: '2099-01-01' })).toThrow(badRequest)
-    expect(() => validateDraft({ avatarPreset: 'javascript:alert(1)' })).toThrow(badRequest)
   })
 })
 

@@ -119,6 +119,9 @@ test('a phone capture becomes a draft that the desktop form picks up and publish
   await page.getByLabel(/地點名稱/).fill('嵐山竹林小徑')
   await page.getByLabel(/娃娃名稱/).fill('小柚')
   await page.locator('#travel-message').fill('# 竹林的清晨\n\n六點的竹林還沒有人，只有風。')
+  // 頭像是必填的，而手機的快速記錄沒有裁切器 —— 這一步本來就得在電腦上補
+  await attachScreenshot(page, '.avatar-cropper input[type="file"]')
+  await expect(page.locator('.crop-editor')).toBeVisible()
   await page.getByRole('button', { name: /寫進未完旅箋/ }).click()
 
   await expect(page).toHaveURL(/\/checkins\/\d+\?created=1/)

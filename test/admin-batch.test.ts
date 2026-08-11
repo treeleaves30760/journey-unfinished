@@ -47,8 +47,7 @@ const checkinInput: CheckinInput = {
   longitude: 121.5654,
   dollName: '測試娃',
   message: '這是一段等待被批量刪除的旅程。',
-  visitedAt: '2026-01-01',
-  avatarPreset: 'sun'
+  visitedAt: '2026-01-01'
 }
 
 interface RequestOptions {
@@ -329,8 +328,8 @@ describe('ids 驗證', () => {
     const admin = context.signIn(ADMIN_DISCORD_ID, '站長')
     const before = context.database.listCheckins().length
 
-    // 1..MAX+1：刻意涵蓋種子資料真的存在的 id（seed() 建立的旅箋通常是 1–6），
-    // 用來確認上限檢查發生在任何資料庫操作之前，而不是刪到一半才喊停。
+    // 1..MAX+1：刻意涵蓋這個資料庫裡真的存在的低號 id，用來確認上限檢查發生在
+    // 任何資料庫操作之前，而不是刪到一半才喊停。
     const tooMany = Array.from({ length: context.MAX_BATCH_DELETE_IDS + 1 }, (_, index) => index + 1)
 
     await expect(context.handler(batchDeleteEvent({ ids: tooMany, token: admin.token })))

@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
     const avatar = await resolveDraftImage(upload, 'avatar')
     savedAvatar = avatar.saved
 
-    // 換成另一隻娃娃時重新套用它的頭像（娃娃用預設頭像的話就是清空）。
+    // 換成另一隻娃娃時重新套用它的頭像（那隻娃娃沒有頭像的話就是清空）。
     // 還是同一隻就沿用草稿已有的那份 —— 否則每按一次「更新草稿」都會多複製一個檔案。
     let avatarValue = avatar.value
     if (avatarValue === undefined && doll && existing.dollId !== doll.id) {

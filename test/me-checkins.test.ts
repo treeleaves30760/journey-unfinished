@@ -48,8 +48,7 @@ const checkinInput: CheckinInput = {
   longitude: 121.5654,
   dollName: '測試娃',
   message: '這是一段放在個人管理區裡的旅程。',
-  visitedAt: '2026-01-01',
-  avatarPreset: 'sun'
+  visitedAt: '2026-01-01'
 }
 
 interface RequestOptions {
@@ -156,7 +155,7 @@ describe('GET /api/me/checkins', () => {
     const stranger = context.signIn(STRANGER_DISCORD_ID, '路人')
     const mine = context.database.createCheckin(checkinInput, null, null, owner.id)
     context.database.createCheckin(checkinInput, null, null, stranger.id)
-    // 種子資料與早期旅箋的 user_id 是 NULL，它們不屬於任何人
+    // 早期匿名寫下的旅箋 user_id 是 NULL，它們不屬於任何人
     context.database.getDatabase()
       .prepare('UPDATE checkins SET user_id = NULL WHERE id = ?')
       .run(context.database.createCheckin(checkinInput, null, null, stranger.id).id)

@@ -206,7 +206,7 @@ async function goHome() {
                 <div v-if="selected.photo" class="selected-photo">
                   <img :src="selected.photo" :alt="`${selected.dollName}在${selected.location}的照片`" loading="lazy">
                 </div>
-                <DollAvatar :src="selected.avatar" :preset="selected.avatarPreset" :alt="`${selected.nickname}頭像`" size="large" />
+                <DollAvatar :src="selected.avatar" :photo="selected.photo" :alt="`${selected.nickname}頭像`" size="large" />
                 <span class="county-chip">{{ placeLabel(selected) }}</span>
                 <h3>{{ selected.location }}</h3>
                 <small v-if="selected.series" class="card-series">✎ {{ selected.series }}</small>
@@ -224,7 +224,7 @@ async function goHome() {
                 >
                   <span class="result-thumb">
                     <img v-if="item.photo" :src="item.photo" alt="" loading="lazy">
-                    <DollAvatar v-else :src="item.avatar" :preset="item.avatarPreset" alt="" size="small" />
+                    <DollAvatar v-else :src="item.avatar" alt="" size="small" />
                   </span>
                   <span><strong>{{ placeLabel(item) }} · {{ item.location }}</strong><small>{{ item.dollName }} · {{ formatDate(item.visitedAt) }}</small></span>
                   <i aria-hidden="true">›</i>

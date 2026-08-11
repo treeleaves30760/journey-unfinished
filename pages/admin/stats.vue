@@ -8,8 +8,8 @@ interface RecentCheckin {
   nickname: string
   county: string
   dollName: string
+  photo: string | null
   avatar: string | null
-  avatarPreset: string
   visitedAt: string
   createdAt: string
 }
@@ -156,7 +156,7 @@ useHead({ title: '統計數據｜未完旅箋管理中心' })
           <div class="admin-section-heading"><div><span class="eyebrow">JOURNEY NOTES</span><h2>最新旅箋</h2></div><span>{{ data.recentActivity.checkins.length }} 則</span></div>
           <div v-if="data.recentActivity.checkins.length" class="admin-checkins">
             <article v-for="item in data.recentActivity.checkins" :key="item.id">
-              <DollAvatar :src="item.avatar" :preset="item.avatarPreset" alt="" size="small" />
+              <DollAvatar :src="item.avatar" :photo="item.photo" alt="" size="small" />
               <div><strong>{{ item.location }}</strong><span>{{ item.nickname }} 與 {{ item.dollName }} · {{ formatDate(item.visitedAt) }}</span></div>
               <NuxtLink class="recent-checkin-link" :to="`/checkins/${item.id}`">查看</NuxtLink>
             </article>

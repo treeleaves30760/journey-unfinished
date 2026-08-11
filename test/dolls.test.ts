@@ -121,7 +121,6 @@ const publishFields = [
   field('dollName', '小柚'),
   field('message', '六點的竹林還沒有人。'),
   field('visitedAt', '2025-11-03'),
-  field('avatarPreset', 'leaf'),
   file('photo', Buffer.alloc(0))
 ]
 
@@ -132,9 +131,9 @@ describe('娃娃檔案的建立與擁有權', () => {
 
     const { doll } = await handlers.create(event({
       token: owner.token,
-      parts: [field('name', '暖暖'), field('series', '夏日重現'), field('avatarPreset', 'sun'), file('avatar', jpeg)]
+      parts: [field('name', '暖暖'), field('series', '夏日重現'), file('avatar', jpeg)]
     }))
-    expect(doll).toMatchObject({ name: '暖暖', series: '夏日重現', avatarPreset: 'sun', checkinCount: 0, lastUsedAt: null })
+    expect(doll).toMatchObject({ name: '暖暖', series: '夏日重現', checkinCount: 0, lastUsedAt: null })
     expect(doll.avatar).toMatch(/^\/uploads\/avatar-[a-f0-9]+\.jpg$/)
     expect(handlers.list(event({ token: owner.token })).dolls).toHaveLength(1)
   })
@@ -170,7 +169,7 @@ describe('娃娃檔案的建立與擁有權', () => {
     const owner = signIn(OWNER_DISCORD_ID, '娃娃主人')
     const { MAX_DOLLS_PER_USER } = await import('../server/utils/dolls')
     for (let index = 0; index < MAX_DOLLS_PER_USER; index += 1) {
-      database.createDoll(owner.id, { name: `娃娃 ${index}`, series: null, avatarPreset: 'sun' }, null)
+      database.createDoll(owner.id, { name: `娃娃 ${index}`, series: null }, null)
     }
     await expect(handlers.create(event({ token: owner.token, parts: [field('name', '再一隻')] })))
       .rejects.toMatchObject({ statusCode: 409 })
@@ -211,18 +210,47 @@ describe('頭像的歸屬', () => {
     expect(handlers.list(event({ token: owner.token })).dolls[0]!.avatar).toBe(doll.avatar)
   })
 
-  it('honours clearAvatar even when a doll is selected', async () => {
-    // 「我選了娃娃，但這一則想用預設頭像」
+  it('lets clearAvatar override the doll when the author supplies their own', async () => {
+    // 「我選了娃娃，但這一則想用另一張頭像」
     const { handlers, signIn, event } = await loadContext()
     const owner = signIn(OWNER_DISCORD_ID, '娃娃主人')
     const { doll } = await handlers.create(event({ token: owner.token, parts: [field('name', '暖暖'), file('avatar', jpeg)] }))
 
     const { checkin } = await handlers.publish(event({
       token: owner.token,
-      parts: [...publishFields.slice(0, -1), file('photo', jpeg), field('dollId', String(doll.id)), field('clearAvatar', '1')]
+      parts: [
+        ...publishFields.slice(0, -1), file('photo', jpeg), file('avatar', jpeg),
+        field('dollId', String(doll.id)), field('clearAvatar', '1')
+      ]
     }))
-    expect(checkin.avatar).toBeNull()
+    expect(checkin.avatar).not.toBe(doll.avatar)
+    expect(checkin.avatar).not.toBeNull()
     expect(checkin.dollId).toBe(doll.id)
+  })
+
+  it('refuses to publish with no avatar at all', async () => {
+    // 那張畫出來的預設頭像已經不存在了，clearAvatar 不再是一條可以什麼都不留的退路。
+    const { handlers, signIn, event, uploadedFiles } = await loadContext()
+    const owner = signIn(OWNER_DISCORD_ID, '娃娃主人')
+    const { doll } = await handlers.create(event({ token: owner.token, parts: [field('name', '暖暖'), file('avatar', jpeg)] }))
+    const before = uploadedFiles()
+
+    await expect(handlers.publish(event({
+      token: owner.token,
+      parts: [...publishFields.slice(0, -1), file('photo', jpeg), field('dollId', String(doll.id)), field('clearAvatar', '1')]
+    }))).rejects.toMatchObject({ statusCode: 400 })
+    // 被擋下來的請求不能留下任何檔案，娃娃檔案自己那張也必須完好
+    expect(uploadedFiles()).toEqual(before)
+  })
+
+  it('refuses to publish without a doll and without an avatar', async () => {
+    const { handlers, signIn, event } = await loadContext()
+    const owner = signIn(OWNER_DISCORD_ID, '娃娃主人')
+
+    await expect(handlers.publish(event({
+      token: owner.token,
+      parts: [...publishFields.slice(0, -1), file('photo', jpeg)]
+    }))).rejects.toMatchObject({ statusCode: 400 })
   })
 })
 
@@ -236,9 +264,10 @@ describe('記住上次用的娃娃', () => {
     // 還沒用過任何一隻時，最新建立的排前面
     expect(handlers.list(event({ token: owner.token })).dolls.map(doll => doll.id)).toEqual([second.id, first.id])
 
+    // 這兩隻娃娃都沒有頭像，發佈時得自己帶一張（頭像是必填的）
     await handlers.publish(event({
       token: owner.token,
-      parts: [...publishFields.slice(0, -1), file('photo', jpeg), field('dollId', String(first.id))]
+      parts: [...publishFields.slice(0, -1), file('photo', jpeg), file('avatar', jpeg), field('dollId', String(first.id))]
     }))
     const listed = handlers.list(event({ token: owner.token })).dolls
     expect(listed[0]).toMatchObject({ id: first.id, checkinCount: 1 })
@@ -250,7 +279,10 @@ describe('記住上次用的娃娃', () => {
     const owner = signIn(OWNER_DISCORD_ID, '娃娃主人')
     expect(handlers.list(event({ token: owner.token })).lastNickname).toBeNull()
 
-    await handlers.publish(event({ token: owner.token, parts: [...publishFields.slice(0, -1), file('photo', jpeg)] }))
+    await handlers.publish(event({
+      token: owner.token,
+      parts: [...publishFields.slice(0, -1), file('photo', jpeg), file('avatar', jpeg)]
+    }))
     expect(handlers.list(event({ token: owner.token })).lastNickname).toBe('柚子')
   })
 })

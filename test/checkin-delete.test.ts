@@ -41,8 +41,7 @@ const checkinInput: CheckinInput = {
   longitude: 121.5654,
   dollName: '測試娃',
   message: '這是一段等待被刪除的旅程。',
-  visitedAt: '2026-01-01',
-  avatarPreset: 'sun'
+  visitedAt: '2026-01-01'
 }
 
 function checkinRecord(overrides: Partial<Checkin> = {}): Checkin {
@@ -215,28 +214,31 @@ describe('DELETE /api/checkins/:id authorization', () => {
   })
 })
 
-describe('seeded notes whose user_id is NULL', () => {
-  async function seededContext() {
+describe('ownerless notes whose user_id is NULL', () => {
+  // 早期還沒有登入機制時寫下的旅箋，以及作者帳號被刪除後外鍵 SET NULL 留下的那些。
+  // createCheckin 一定要有 userId，所以這裡直接把它改回 NULL 來重現那個狀態。
+  async function ownerlessContext() {
     const context = await loadContext()
-    const seeded = context.database.listCheckins().filter(checkin => checkin.userId === null)
-    expect(seeded.length).toBeGreaterThan(0)
-    const target = seeded[0]!
-    const photo = context.storedImage('photo', 'seeded')
-    const avatar = context.storedImage('avatar', 'seeded')
-    context.database.getDatabase()
-      .prepare('UPDATE checkins SET photo = ?, avatar = ? WHERE id = ?')
-      .run(photo, avatar, target.id)
-    return { ...context, target, photo, avatar }
+    // member 必須是第一個註冊的人：下面那條「NULL 不可以配上任何 id」的陷阱，要靠他的
+    // id 正好是資料庫裡最小的那一個才踩得到。作者排在他後面。
+    const member = context.signIn(OWNER_DISCORD_ID, '一般會員')
+    const author = context.signIn('900000000000000090', '之後會消失的作者')
+    const photo = context.storedImage('photo', 'ownerless')
+    const avatar = context.storedImage('avatar', 'ownerless')
+    const created = context.database.createCheckin(checkinInput, photo, avatar, author.id)
+    context.database.getDatabase().prepare('UPDATE checkins SET user_id = NULL WHERE id = ?').run(created.id)
+    const target = context.database.findCheckin(created.id)!
+    expect(target.userId).toBeNull()
+    return { ...context, target, photo, avatar, member }
   }
 
   it('refuses every ordinary member, because NULL must not match any user id', async () => {
-    const context = await seededContext()
-    const member = context.signIn(OWNER_DISCORD_ID, '一般會員')
+    const context = await ownerlessContext()
     // 這個會員的 id 就是資料庫裡的第一個 user id；若擁有者判斷寫得寬鬆
     // （例如 `!checkin.userId || checkin.userId === user.id`），這裡就會被放行。
-    expect(member.id).toBe(1)
+    expect(context.member.id).toBe(1)
 
-    expect(() => context.handler(deleteEvent({ id: context.target.id, token: member.token })))
+    expect(() => context.handler(deleteEvent({ id: context.target.id, token: context.member.token })))
       .toThrowError(expect.objectContaining({ statusCode: 403 }))
 
     expect(context.database.findCheckin(context.target.id)).toBeDefined()
@@ -244,8 +246,8 @@ describe('seeded notes whose user_id is NULL', () => {
     expect(context.imageExists(context.avatar)).toBe(true)
   })
 
-  it('lets an administrator clean up an ownerless seeded note', async () => {
-    const context = await seededContext()
+  it('lets an administrator clean up an ownerless note', async () => {
+    const context = await ownerlessContext()
     const admin = context.signIn(ADMIN_DISCORD_ID, '站長')
 
     expect(context.handler(deleteEvent({ id: context.target.id, token: admin.token }))).toEqual({ deleted: true })

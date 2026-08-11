@@ -40,8 +40,7 @@ const baseFields = {
   longitude: '121.535',
   dollName: '小櫻',
   message: '今天一起來散步。',
-  visitedAt: '2026-03-15',
-  avatarPreset: 'peach'
+  visitedAt: '2026-03-15'
 }
 
 describe('series：從表單驗證到資料庫的完整路徑', () => {
@@ -119,8 +118,7 @@ describe('series：從表單驗證到資料庫的完整路徑', () => {
       longitude: 121.535,
       dollName: '舊娃',
       message: '沒有帶 series 欄位。',
-      visitedAt: '2026-01-01',
-      avatarPreset: 'sun'
+      visitedAt: '2026-01-01'
     }
     const created = database.createCheckin(legacyInput, null, null, user.id)
     expect(created.series).toBeNull()

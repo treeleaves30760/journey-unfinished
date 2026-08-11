@@ -40,12 +40,11 @@ const input: CheckinInput = {
   dollName: '測試娃',
   series: '測試作品',
   message: '這是一段測試旅程。',
-  visitedAt: '2026-01-01',
-  avatarPreset: 'sun'
+  visitedAt: '2026-01-01'
 }
 
 describe('SQLite schema and migrations', () => {
-  it('creates the complete schema, relationships and demo data once', async () => {
+  it('creates the complete schema and relationships, and stays empty', async () => {
     const filename = temporaryDatabase()
     const database = await loadDatabase(filename)
     const db = database.getDatabase()
@@ -62,20 +61,14 @@ describe('SQLite schema and migrations', () => {
     expect(commentForeignKey).toContainEqual(expect.objectContaining({ from: 'checkin_id', on_delete: 'CASCADE' }))
     const checkinColumnNames = (db.prepare('PRAGMA table_info(checkins)').all() as Array<{ name: string }>).map(column => column.name)
     expect(checkinColumnNames).toEqual(expect.arrayContaining(['user_id', 'series', 'country_code']))
-    expect(database.listCheckins()).toHaveLength(8)
-    // 示範資料刻意跨到臺灣以外，全新安裝一打開就看得出地圖是全球的
-    expect(new Set(database.listCheckins().map(checkin => checkin.countryCode))).toEqual(new Set(['TW', 'JP', 'IS']))
-    const firstId = Math.min(...database.listCheckins().map(checkin => checkin.id))
-    expect(database.listComments(firstId)).toHaveLength(1)
-    expect(database.listCheckins().every(checkin => checkin.userId === null)).toBe(true)
-    // 種子資料是站方聲明的原創創作（見首頁頁尾「本站示意內容與頭像皆為原創」），
-    // 全部都不該帶作品出處——這也順便釘住「留空要存 null」不會被悄悄改回空字串。
-    expect(database.listCheckins().every(checkin => checkin.series === null)).toBe(true)
-
-    db.prepare('DELETE FROM checkins').run()
-    database.closeDatabaseForTests()
+    // 示範資料已經移除：全新安裝就是一張空地圖，第一則旅箋由使用者自己寫下。
     expect(database.listCheckins()).toHaveLength(0)
-    expect(database.getDatabase().prepare("SELECT value FROM app_meta WHERE key = 'demo_seeded'").get()).toBeTruthy()
+    // avatar_preset 選的是一張畫出來的預設頭像，那張臉與這個欄位都已經整組移除。
+    // 三張表都不該再帶著它——包含全新建立的資料庫。
+    for (const table of ['checkins', 'dolls', 'checkin_drafts']) {
+      const names = (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(column => column.name)
+      expect(names, table).not.toContain('avatar_preset')
+    }
   })
 
   it('migrates the legacy schema without replacing existing rows', async () => {
@@ -137,7 +130,8 @@ describe('SQLite schema and migrations', () => {
     const indexes = (database.getDatabase().prepare("SELECT name FROM sqlite_master WHERE type = 'index'")
       .all() as Array<{ name: string }>).map(row => row.name)
     expect(indexes).toEqual(expect.arrayContaining(['idx_checkins_user']))
-    expect(database.getDatabase().prepare("SELECT value FROM app_meta WHERE key = 'demo_seeded'").get()).toEqual({ value: 'legacy' })
+    // 舊資料庫帶著 avatar_preset，遷移必須把它丟掉，而且不能動到同一列的其他欄位
+    expect(columns.some(column => column.name === 'avatar_preset')).toBe(false)
 
     database.closeDatabaseForTests()
     expect(database.listCheckins()).toHaveLength(1)
@@ -169,7 +163,7 @@ describe('SQLite schema and migrations', () => {
     const draft = database.createDraft(owner.id, {
       dollId: null, nickname: null, location: '只拍了照片的地方', countryCode: 'JP', county: '京都府',
       latitude: 35.0169, longitude: 135.6716, dollName: null, series: null,
-      message: null, visitedAt: null, avatarPreset: 'sun'
+      message: null, visitedAt: null
     }, '/uploads/photo-draft.jpg', null)
 
     expect(draft).toMatchObject({ userId: owner.id, countryCode: 'JP', photo: '/uploads/photo-draft.jpg', message: null })
@@ -180,15 +174,15 @@ describe('SQLite schema and migrations', () => {
     const updated = database.updateDraft(draft.id, {
       dollId: null, nickname: '旅人', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
       latitude: 35.0169, longitude: 135.6716, dollName: '小柚', series: null,
-      message: '## 竹林的清晨', visitedAt: '2025-11-03', avatarPreset: 'leaf'
+      message: '## 竹林的清晨', visitedAt: '2025-11-03'
     }, undefined, undefined)
-    expect(updated).toMatchObject({ photo: '/uploads/photo-draft.jpg', message: '## 竹林的清晨', avatarPreset: 'leaf' })
+    expect(updated).toMatchObject({ photo: '/uploads/photo-draft.jpg', message: '## 竹林的清晨' })
 
     // 明確傳 null 才是「清空」
     const cleared = database.updateDraft(draft.id, {
       dollId: null, nickname: '旅人', location: '嵐山竹林小徑', countryCode: 'JP', county: '京都府',
       latitude: 35.0169, longitude: 135.6716, dollName: '小柚', series: null,
-      message: '## 竹林的清晨', visitedAt: '2025-11-03', avatarPreset: 'leaf'
+      message: '## 竹林的清晨', visitedAt: '2025-11-03'
     }, null, undefined)
     expect(cleared?.photo).toBeNull()
 
@@ -202,8 +196,10 @@ describe('SQLite schema and migrations', () => {
     new Database(legacyFilename).close()
 
     const database = await loadDatabase(requestedFilename)
-    expect(database.listCheckins()).toHaveLength(8)
+    // 打開的是舊檔名那一份（schema 已就緒且是空的），而不是替新檔名另外建一個
+    expect(database.listCheckins()).toHaveLength(0)
     expect(fs.existsSync(requestedFilename)).toBe(false)
+    expect(fs.existsSync(legacyFilename)).toBe(true)
   })
 })
 

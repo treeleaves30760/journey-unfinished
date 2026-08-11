@@ -445,16 +445,6 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 }
 .card-photo { position: relative; display: block; aspect-ratio: 4 / 3; overflow: hidden; background: var(--paper-deep); }
 .card-photo > img { width: 100%; height: 100%; object-fit: cover; transition: transform .45s ease; }
-.placeholder-scene { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(#f7d5c7 0 58%, #b6cfb5 58%); }
-.scene-2 .placeholder-scene { background: linear-gradient(#cbdde2 0 58%, #99baa8 58%); }
-.scene-3 .placeholder-scene { background: linear-gradient(#f4dfb9 0 58%, #bdcba6 58%); }
-.scene-4 .placeholder-scene { background: linear-gradient(#ddd2e0 0 58%, #93af9d 58%); }
-.scene-5 .placeholder-scene { background: linear-gradient(#c9dceb 0 58%, #d0b789 58%); }
-.scene-6 .placeholder-scene { background: linear-gradient(#f3cdd1 0 58%, #87aa91 58%); }
-.sun-or-moon { position: absolute; top: 17%; right: 17%; width: 40px; height: 40px; border-radius: 50%; background: #f4cd72; box-shadow: 0 0 0 9px rgb(244 205 114 / 17%); }
-.hill { position: absolute; bottom: 0; width: 88%; height: 61%; border-radius: 50% 50% 0 0; }
-.hill.far { right: -28%; background: #91b092; }
-.hill.near { left: -24%; bottom: -12%; background: #668d74; }
 .county-chip { display: inline-flex; width: fit-content; align-items: center; padding: 5px 10px; color: var(--forest-dark); border: 1px solid rgb(63 112 93 / 12%); border-radius: 999px; background: var(--sage); font-size: .72rem; font-weight: 800; line-height: 1.35; }
 .card-photo > .county-chip { position: absolute; top: 13px; left: 13px; z-index: 2; color: var(--ink); border: 0; background: rgb(255 253 249 / 91%); box-shadow: 0 5px 14px rgb(56 47 52 / 8%); }
 .card-body { display: flex; min-width: 0; flex: 1; flex-direction: column; padding: 19px; }
@@ -469,27 +459,11 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 .card-body > p { display: -webkit-box; min-height: 3.2em; margin: 0; overflow: hidden; color: var(--muted); font-size: .9rem; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .card-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 15px; border-top: 1px solid var(--line); }
 
-.doll-avatar { display: grid; flex: 0 0 auto; overflow: hidden; place-items: center; color: white; border: 3px solid white; border-radius: 50%; box-shadow: 0 5px 14px rgb(56 47 52 / 17%); }
+.doll-avatar { display: grid; flex: 0 0 auto; overflow: hidden; place-items: center; border: 3px solid white; border-radius: 50%; background: var(--paper-deep); box-shadow: 0 5px 14px rgb(56 47 52 / 17%); }
 .doll-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .doll-avatar.avatar-small { width: 42px; height: 42px; }
 .doll-avatar.avatar-medium { width: 56px; height: 56px; }
 .doll-avatar.avatar-large { width: 86px; height: 86px; }
-.avatar-sun { background: linear-gradient(145deg, #efad59, #d76c58); }
-.avatar-leaf { background: linear-gradient(145deg, #79b28e, #477967); }
-.avatar-berry { background: linear-gradient(145deg, #b97899, #784d74); }
-.avatar-ocean { background: linear-gradient(145deg, #72b3c6, #4e779e); }
-.avatar-cloud { background: linear-gradient(145deg, #abb9c9, #73859a); }
-.avatar-peach { background: linear-gradient(145deg, #ef999a, #cf6680); }
-.avatar-art { position: relative; width: 100%; height: 100%; }
-.avatar-art::before { position: absolute; top: 27%; left: 20%; width: 60%; height: 56%; content: ''; border-radius: 48% 48% 44% 44%; background: #f2d0bc; box-shadow: inset 0 -4px rgb(209 130 120 / 10%); }
-.avatar-art b { position: absolute; top: 2%; right: 9%; color: rgb(255 255 255 / 88%); font-size: .72rem; line-height: 1; }
-.avatar-art .ear { position: absolute; top: 43%; z-index: 1; width: 12%; height: 20%; border-radius: 50%; background: #efc7b2; }
-.avatar-art .ear.left { left: 14%; }
-.avatar-art .ear.right { right: 14%; }
-.avatar-art .eye { position: absolute; top: 51%; z-index: 2; width: 5%; aspect-ratio: 1; border-radius: 50%; background: #564047; }
-.avatar-art .eye.left { left: 36%; }
-.avatar-art .eye.right { right: 36%; }
-.avatar-art .smile { position: absolute; bottom: 25%; left: 50%; z-index: 2; width: 16%; height: 8%; border-bottom: 2px solid #a85468; border-radius: 50%; transform: translateX(-50%); }
 
 .cta-section {
   position: relative;
@@ -601,6 +575,13 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--rose); background: white; box-shadow: 0 0 0 4px rgb(217 103 126 / 10%); }
 .field input::placeholder, .field textarea::placeholder { color: #a79ba0; }
 .counter { justify-self: end; color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
+/* 包住裁切器的區塊。不沿用 .field 是因為 .field input 的尺寸規則會一起套到裁切器的
+   檔案輸入與三根滑桿上，把整組控制項撐壞。 */
+.field-block { display: grid; min-width: 0; gap: 7px; margin-top: 18px; }
+.field-block-label { font-size: .84rem; font-weight: 800; }
+.field-block-label b { color: var(--rose-dark); }
+.field-block .avatar-cropper { margin-top: 0; }
+.field-block .doll-current-avatar + .avatar-cropper { margin-top: 4px; }
 .avatar-cropper { display: grid; max-width: 100%; gap: 12px; margin-top: 16px; }
 .crop-upload { min-width: 0; }
 .upload-drop {
@@ -696,7 +677,6 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
    不然「這張圖可以點」這件事在手機上等於沒有說 */
 .detail-photo-hint { position: absolute; right: 14px; bottom: 14px; z-index: 4; padding: 7px 12px; color: white; border-radius: 999px; background: rgb(56 47 52 / 66%); font-size: .74rem; font-weight: 800; opacity: .85; transition: opacity .18s ease, background-color .18s ease; backdrop-filter: blur(8px); }
 .detail-photo-zoom:hover .detail-photo-hint, .detail-photo-zoom:focus-visible .detail-photo-hint { background: rgb(56 47 52 / 86%); opacity: 1; }
-.detail-photo .placeholder-scene { position: absolute; inset: 0; }
 
 /* 放大檢視。z-index 要壓過黏頂的 header（800）與手機黏底操作列（900），
    但留在 skip-link（1000）之下——鍵盤使用者的逃生口永遠在最上層。 */
@@ -711,7 +691,6 @@ h1, h2, h3, p, blockquote, dd { overflow-wrap: anywhere; }
 .lightbox-close:focus-visible { outline: 3px solid var(--rose); outline-offset: 3px; }
 .lightbox-enter-active, .lightbox-leave-active { transition: opacity .2s ease; }
 .lightbox-enter-from, .lightbox-leave-to { opacity: 0; }
-.placeholder-scene.large > span { position: absolute; right: 8%; bottom: 7%; z-index: 3; color: rgb(255 255 255 / 65%); font: 700 clamp(1.2rem, 3vw, 2.5rem)/1.05 'Zen Maru Gothic', sans-serif; letter-spacing: .08em; text-align: right; }
 .photo-tape { position: absolute; z-index: 3; width: 88px; height: 24px; background: rgb(246 225 170 / 76%); backdrop-filter: blur(2px); }
 .photo-tape.left { top: 22px; left: -20px; transform: rotate(-37deg); }
 .photo-tape.right { right: -20px; bottom: 25px; transform: rotate(-37deg); }

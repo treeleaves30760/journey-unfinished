@@ -113,8 +113,8 @@ export function copySavedImage(url: string | null, prefix: 'photo' | 'avatar') {
   try {
     fs.copyFileSync(source, path.join(uploadDir, filename), fs.constants.COPYFILE_EXCL)
   } catch {
-    // 來源檔不見了（例如手動清過上傳目錄）。頭像是選填的，退回預設頭像即可，
-    // 不值得為了它讓整個「寫下旅箋」失敗。
+    // 來源檔不見了（例如手動清過上傳目錄）。回 null 讓呼叫端照常走「沒有頭像」那條路 ——
+    // 發佈旅箋時那會變成一個說得清楚的 400，比在這裡拋出檔案系統錯誤好懂得多。
     return null
   }
   return `/uploads/${filename}`

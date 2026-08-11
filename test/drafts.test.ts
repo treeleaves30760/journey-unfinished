@@ -159,7 +159,7 @@ describe('草稿的建立與跨裝置接手', () => {
       database.createDraft(owner.id, {
         dollId: null, nickname: null, location: `地點 ${index}`, countryCode: null, county: null,
         latitude: null, longitude: null, dollName: null, series: null,
-        message: null, visitedAt: null, avatarPreset: 'sun'
+        message: null, visitedAt: null
       }, null, null)
     }
     // 每份草稿都可能帶著一張 5 MB 的照片，沒有上限就是一條無限制的空間消耗路徑
@@ -255,9 +255,12 @@ describe('把草稿發佈成旅箋', () => {
     field('longitude', '135.6716'),
     field('dollName', '小柚'),
     field('message', '## 竹林的清晨\n\n六點的竹林還沒有人。'),
-    field('visitedAt', '2025-11-03'),
-    field('avatarPreset', 'leaf')
+    field('visitedAt', '2025-11-03')
   ]
+
+  // 草稿本身可以什麼都缺，但發佈成旅箋時頭像是必填的，所以每個發佈情境都要帶一張。
+  // 是函式而不是常數：jpeg 要等 beforeAll 才有值，在 describe 展開時取用會拿到 undefined。
+  const publishParts = () => [...publishFields, file('avatar', jpeg)]
 
   it('reuses the draft photo, then removes the draft but keeps the file', async () => {
     const { handlers, signIn, event, uploadedFiles } = await loadContext()
@@ -266,11 +269,11 @@ describe('把草稿發佈成旅箋', () => {
 
     const { checkin } = await handlers.publish(event({
       token: owner.token,
-      parts: [...publishFields, field('draftId', String(draft.id))]
+      parts: [...publishParts(), field('draftId', String(draft.id))]
     }))
     // 手機上已經上傳、也已經被 sharp 剝過 EXIF 的那張圖直接沿用，不必為了發佈再傳一次幾 MB
     expect(checkin.photo).toBe(draft.photo)
-    expect(uploadedFiles()).toEqual([path.basename(draft.photo!)])
+    expect(uploadedFiles().sort()).toEqual([path.basename(draft.photo!), path.basename(checkin.avatar!)].sort())
     expect(handlers.list(event({ token: owner.token })).drafts).toHaveLength(0)
   })
 
@@ -281,11 +284,40 @@ describe('把草稿發佈成旅箋', () => {
 
     const { checkin } = await handlers.publish(event({
       token: owner.token,
-      parts: [...publishFields, field('draftId', String(draft.id)), file('photo', secondJpeg)]
+      parts: [...publishParts(), field('draftId', String(draft.id)), file('photo', secondJpeg)]
     }))
     expect(checkin.photo).not.toBe(draft.photo)
     // 草稿那張已經沒有人引用了，留著就是孤兒檔案
-    expect(uploadedFiles()).toEqual([path.basename(checkin.photo!)])
+    expect(uploadedFiles().sort()).toEqual([path.basename(checkin.photo!), path.basename(checkin.avatar!)].sort())
+  })
+
+  it('refuses to publish a draft that still has no avatar', async () => {
+    // 草稿階段沒有頭像是正常的（手機上的快速記錄根本沒有裁切器），
+    // 但它不能就這樣變成旅箋 —— 旅箋沒有編輯端點，補不回來。
+    const { handlers, signIn, event } = await loadContext()
+    const owner = signIn(OWNER_DISCORD_ID, '草稿作者')
+    const { draft } = await handlers.create(event({ token: owner.token, parts: [file('photo', jpeg)] }))
+
+    await expect(handlers.publish(event({
+      token: owner.token,
+      parts: [...publishFields, field('draftId', String(draft.id))]
+    }))).rejects.toMatchObject({ statusCode: 400 })
+    // 擋下來之後草稿必須原封不動，作者回頭補張頭像就能再送一次
+    expect(handlers.list(event({ token: owner.token })).drafts).toHaveLength(1)
+  })
+
+  it('inherits the avatar the draft was already carrying', async () => {
+    const { handlers, signIn, event } = await loadContext()
+    const owner = signIn(OWNER_DISCORD_ID, '草稿作者')
+    const { draft } = await handlers.create(event({
+      token: owner.token, parts: [file('photo', jpeg), file('avatar', jpeg)]
+    }))
+
+    const { checkin } = await handlers.publish(event({
+      token: owner.token,
+      parts: [...publishFields, field('draftId', String(draft.id))]
+    }))
+    expect(checkin.avatar).toBe(draft.avatar)
   })
 
   it('refuses to publish someone else draft', async () => {

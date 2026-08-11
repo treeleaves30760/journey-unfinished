@@ -63,7 +63,7 @@ watch(dolls, (list) => {
         :aria-pressed="modelValue === doll.id"
         @click="choose(doll)"
       >
-        <DollAvatar :src="doll.avatar" :preset="doll.avatarPreset" alt="" size="medium" />
+        <DollAvatar :src="doll.avatar" alt="" size="medium" />
         <strong>{{ doll.name }}</strong>
         <small v-if="index === 0 && doll.lastUsedAt">上次用的</small>
         <small v-else-if="doll.checkinCount">{{ doll.checkinCount }} 則旅箋</small>
