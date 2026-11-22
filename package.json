@@ -20,11 +20,11 @@
     "audit:all": "npm audit"
   },
   "dependencies": {
-    "@fastify/busboy": "3.2.0",
+    "@fastify/busboy": "3.2.6",
     "better-sqlite3": "13.0.1",
     "leaflet": "1.9.4",
-    "nuxt": "4.5.2",
-    "sharp": "0.35.3"
+    "nuxt": "4.6.4",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@nuxt/test-utils": "4.0.3",
@@ -32,15 +32,15 @@
     "@types/better-sqlite3": "7.6.13",
     "@types/leaflet": "1.9.21",
     "typescript": "6.0.2",
-    "vitest": "4.1.10",
+    "vitest": "4.1.12",
     "vue-tsc": "3.3.8"
   },
   "overrides": {
     "archiver": {
-      "readdir-glob": "3.0.0"
+      "readdir-glob": "4.0.0"
     },
     "archiver-utils": {
-      "glob": "13.0.6"
+      "glob": "14.0.6"
     }
   },
   "engines": {

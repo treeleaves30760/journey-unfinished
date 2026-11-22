@@ -283,7 +283,7 @@ docker run -d \
   --init \
   --security-opt no-new-privileges:true \
   --cap-drop ALL \
-  -p 3000:3000 \
+  -p 127.0.0.1:3000:3000 \
   -v journey-unfinished-data:/app/data \
   journey-unfinished:latest
 ```
@@ -299,8 +299,11 @@ curl http://localhost:3000/api/health
 ### 3. Docker Compose（推薦）
 
 ```bash
-# 建置並啟動
+# 建置並啟動（預設只綁 127.0.0.1:3000，對外請經由同機的反向代理）
 docker compose up -d --build
+
+# 需要從其他主機直連（例如區網測試）時才改綁所有介面；此時請維持 NUXT_TRUSTED_PROXY_HOPS=0
+APP_BIND_ADDRESS=0.0.0.0 docker compose up -d --build
 
 # 查看狀態與日誌
 docker compose ps
