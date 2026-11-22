@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clientAddress, enforceRateLimit, enforceSameOrigin, readLimitedJson } from '../server/utils/request-security'
+import { clientAddress, enforceRateLimit, enforceSameOrigin, rateLimitSubject, readLimitedJson } from '../server/utils/request-security'
 
 vi.mock('h3', async importOriginal => {
   const actual = await importOriginal<typeof import('h3')>()
@@ -138,6 +138,52 @@ describe('enforceRateLimit', () => {
     expect(() => enforceRateLimit(proxyEvent('10.0.0.1', '198.51.100.7'), 'trusted-xff', 1, 60_000)).not.toThrow()
     expect(() => enforceRateLimit(proxyEvent('10.0.0.1', '198.51.100.8'), 'trusted-xff', 1, 60_000)).not.toThrow()
     expect(() => enforceRateLimit(proxyEvent('10.0.0.1', '198.51.100.8'), 'trusted-xff', 1, 60_000))
+      .toThrowError(expect.objectContaining({ statusCode: 429 }))
+  })
+})
+
+describe('rateLimitSubject', () => {
+  it('leaves IPv4 and non-address fallbacks untouched', () => {
+    expect(rateLimitSubject('198.51.100.20')).toBe('198.51.100.20')
+    expect(rateLimitSubject('unknown')).toBe('unknown')
+  })
+
+  it('collapses every address of an IPv6 /64 into one subject', () => {
+    expect(rateLimitSubject('2001:db8:1:2::1')).toBe('2001:db8:1:2::/64')
+    expect(rateLimitSubject('2001:db8:1:2:aaaa:bbbb:cccc:dddd')).toBe('2001:db8:1:2::/64')
+    expect(rateLimitSubject('2001:0DB8:0001:0002:0:0:0:9')).toBe('2001:db8:1:2::/64')
+    expect(rateLimitSubject('2001:db8::1')).toBe('2001:db8:0:0::/64')
+    expect(rateLimitSubject('::1')).toBe('0:0:0:0::/64')
+  })
+
+  it('keeps neighbouring /64 networks apart', () => {
+    expect(rateLimitSubject('2001:db8:1:3::1')).not.toBe(rateLimitSubject('2001:db8:1:2::1'))
+  })
+
+  it('treats an IPv4-mapped IPv6 address as the IPv4 client it is', () => {
+    expect(rateLimitSubject('::ffff:203.0.113.9')).toBe('203.0.113.9')
+    expect(rateLimitSubject('::ffff:cb00:7109')).toBe('203.0.113.9')
+    expect(rateLimitSubject('0:0:0:0:0:ffff:203.0.113.9')).toBe('203.0.113.9')
+  })
+
+  it('does not mistake other embedded-IPv4 forms for a mapped address', () => {
+    expect(rateLimitSubject('64:ff9b::203.0.113.9')).toBe('64:ff9b:0:0::/64')
+  })
+})
+
+describe('enforceRateLimit across IPv6 addresses', () => {
+  it('shares one bucket while the client rotates inside its /64', () => {
+    stubProxyConfig({})
+    expect(() => enforceRateLimit(proxyEvent('2001:db8:7:7::1'), 'rotating-v6', 1, 60_000)).not.toThrow()
+    expect(() => enforceRateLimit(proxyEvent('2001:db8:7:7:dead:beef:0:2'), 'rotating-v6', 1, 60_000))
+      .toThrowError(expect.objectContaining({ statusCode: 429 }))
+    expect(() => enforceRateLimit(proxyEvent('2001:db8:7:8::1'), 'rotating-v6', 1, 60_000)).not.toThrow()
+  })
+
+  it('shares one bucket between the IPv4 and IPv4-mapped spellings of a client', () => {
+    stubProxyConfig({})
+    expect(() => enforceRateLimit(proxyEvent('203.0.113.77'), 'mapped-v4', 1, 60_000)).not.toThrow()
+    expect(() => enforceRateLimit(proxyEvent('::ffff:203.0.113.77'), 'mapped-v4', 1, 60_000))
       .toThrowError(expect.objectContaining({ statusCode: 429 }))
   })
 })

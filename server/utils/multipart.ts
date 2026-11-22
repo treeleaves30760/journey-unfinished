@@ -1,4 +1,4 @@
-import Busboy from '@fastify/busboy'
+import Busboy, { type BusboyInstance } from '@fastify/busboy'
 import { createError, getRequestHeaders, getRequestWebStream, type H3Event, type MultiPartData } from 'h3'
 import { Readable } from 'node:stream'
 
@@ -40,7 +40,7 @@ export async function readLimitedMultipart(event: H3Event, maxUploadBytes: numbe
       reject(error)
     }
 
-    let parser: Busboy
+    let parser: BusboyInstance
     try {
       parser = new Busboy({
         headers: { 'content-type': contentType, 'content-length': headers['content-length'] },

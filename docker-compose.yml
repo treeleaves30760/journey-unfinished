@@ -7,7 +7,11 @@ services:
     restart: unless-stopped
     init: true
     ports:
-      - "3000:3000"
+      # 預設只綁 loopback：應用本身不做 TLS，而且一旦設定了 NUXT_TRUSTED_PROXY_HOPS，
+      # 能直接連到 3000 的人就可以自己填 X-Forwarded-For 偽造來源 IP、繞過所有限流。
+      # 對外流量一律經由同機的反向代理。確實需要從其他主機直連時（例如區網測試）
+      # 才設 APP_BIND_ADDRESS=0.0.0.0，並維持 NUXT_TRUSTED_PROXY_HOPS=0。
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:3000:3000"
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -20,6 +24,9 @@ services:
       NUXT_DISCORD_REDIRECT_URI: ${NUXT_DISCORD_REDIRECT_URI:?required}
       NUXT_ADMIN_DISCORD_IDS: ${NUXT_ADMIN_DISCORD_IDS:-}
       NUXT_SESSION_DAYS: ${NUXT_SESSION_DAYS:-30}
+      # 前面有「覆寫」X-Forwarded-For 的反向代理時設為代理層數，否則所有訪客會共用同一個限流桶
+      # （一個人洗版就能讓全站留言被 429）。沒有代理、或代理是附加語意時維持 0。
+      NUXT_TRUSTED_PROXY_HOPS: ${NUXT_TRUSTED_PROXY_HOPS:-0}
     volumes:
       - journey-unfinished-data:/app/data
     security_opt:

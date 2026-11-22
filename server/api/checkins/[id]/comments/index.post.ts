@@ -1,6 +1,6 @@
 import { createError } from 'h3'
 import { createComment, findCheckin } from '../../../../utils/database'
-import { clientAddress, enforceRateLimit, enforceSameOrigin, readLimitedJson } from '../../../../utils/request-security'
+import { clientRateKey, enforceRateLimit, enforceSameOrigin, readLimitedJson } from '../../../../utils/request-security'
 import { assertUniqueComment, parseId, validateComment } from '../../../../utils/validation'
 
 export default defineEventHandler(async (event) => {
@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   const input = validateComment(body)
   // 指紋算的是正規化、去空白後的內容，所以必須排在 validateComment 之後；
   // 也不能在驗證失敗時就先記錄，否則使用者改好格式重送會被自己上一次的失敗紀錄擋住。
-  assertUniqueComment(clientAddress(event), input.nickname, input.message)
+  assertUniqueComment(clientRateKey(event), input.nickname, input.message)
   const comment = createComment(id, input.nickname, input.message)
   setResponseStatus(event, 201)
   return { comment }

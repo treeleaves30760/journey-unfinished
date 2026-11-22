@@ -56,6 +56,48 @@ export function clientAddress(event: H3Event): string {
 }
 
 /**
+ * 把 IPv6 位址收斂成它所屬的 /64，供限流與重複偵測當「同一個來源」的鍵。
+ *
+ * ISP 發給一條線路的通常就是一整段 /64（甚至 /56），用戶端可以在裡面任意換位址。
+ * 若以完整的 128 位元位址分桶，一台機器就有 2^64 個各自滿額的桶：每換一個位址，
+ * 匿名留言的三層限流與重複偵測就全部歸零；同時也能用垃圾鍵塞滿 MAX_TRACKED_BUCKETS，
+ * 讓所有新訪客在被限流的端點上拿到 503。
+ *
+ * IPv4 與 IPv4-mapped IPv6（::ffff:a.b.c.d）是同一個來源，後者還原成 IPv4，
+ * 避免同一位訪客因為 socket 的呈現方式不同而拿到兩個桶。
+ */
+export function rateLimitSubject(address: string): string {
+  if (isIP(address) !== 6) return address
+
+  const [head = '', tail] = address.toLowerCase().split('::') as [string, string | undefined]
+  const groupsOf = (part: string) => part
+    ? part.split(':').flatMap((group) => {
+        if (!group.includes('.')) return [parseInt(group, 16)]
+        // 內嵌的 IPv4 尾段（::ffff:203.0.113.9、64:ff9b::203.0.113.9）佔兩個 16 位元群組
+        const [a = 0, b = 0, c = 0, d = 0] = group.split('.').map(Number)
+        return [(a << 8) | b, (c << 8) | d]
+      })
+    : []
+  const headGroups = groupsOf(head)
+  const tailGroups = tail === undefined ? [] : groupsOf(tail)
+  const groups = tail === undefined
+    ? headGroups
+    : [...headGroups, ...new Array<number>(Math.max(0, 8 - headGroups.length - tailGroups.length)).fill(0), ...tailGroups]
+  // isIP 已經驗證過格式，這裡只是防禦：湊不出 8 組就退回原字串，寧可分桶太細也不要把不同來源併在一起
+  if (groups.length !== 8 || groups.some(group => !Number.isInteger(group) || group < 0 || group > 0xffff)) return address
+
+  const isMapped = groups.slice(0, 5).every(group => group === 0) && groups[5] === 0xffff
+  if (isMapped) return `${groups[6]! >> 8}.${groups[6]! & 0xff}.${groups[7]! >> 8}.${groups[7]! & 0xff}`
+
+  return `${groups.slice(0, 4).map(group => group.toString(16)).join(':')}::/64`
+}
+
+/** 限流與重複偵測共用的來源鍵：IPv4 是位址本身，IPv6 是它的 /64。 */
+export function clientRateKey(event: H3Event): string {
+  return rateLimitSubject(clientAddress(event))
+}
+
+/**
  * 計數桶只存在單一 process 的記憶體中，因此限流僅在單一 replica 下正確；
  * 本專案的資料層是 SQLite，本來就只能單 replica，這個前提成立。
  * 未來若要橫向擴充成多實例，必須換成共用計數器（例如 Redis），
@@ -63,7 +105,7 @@ export function clientAddress(event: H3Event): string {
  */
 export function enforceRateLimit(event: H3Event, scope: string, limit: number, windowMs: number) {
   const now = Date.now()
-  const key = `${scope}:${clientAddress(event)}`
+  const key = `${scope}:${clientRateKey(event)}`
   const bucket = buckets.get(key)
 
   if (!bucket || bucket.resetAt <= now) {
